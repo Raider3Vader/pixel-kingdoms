@@ -2,8 +2,8 @@
 // from the design doc and are meant to be changed during playtests.
 
 export type ResKind = 'food' | 'wood';
-export type UnitType = 'villager' | 'swordsman' | 'archer' | 'cavalry';
-export type BuildingType = 'townCenter' | 'storehouse' | 'house' | 'barracks';
+export type UnitType = 'villager' | 'swordsman' | 'archer' | 'cavalry' | 'scout';
+export type BuildingType = 'townCenter' | 'storehouse' | 'house' | 'barracks' | 'stable';
 export type ResourceType = 'berries' | 'sheep' | 'tree';
 
 export const SIM = {
@@ -31,7 +31,7 @@ export const ECONOMY = {
   startingFood: 100,
   startingWood: 50,
   startingVillagers: 3,
-  startingScouts: 1, // a cavalry rider for exploring
+  startingScouts: 1, // a fast Scout for exploring
   maxPop: 100,
   maxQueue: 5,
 } as const;
@@ -61,7 +61,8 @@ export const BUILDINGS: Record<BuildingType, BuildingStats> = {
   townCenter: { name: 'Town Center', wood: 0, buildSec: 0, size: 3, hp: 600, sight: 8, pop: 10, dropoff: true, trains: ['villager'], attack: 4, attackSec: 1.5, rangeTiles: 6 },
   storehouse: { name: 'Storehouse', wood: 60, buildSec: 20, size: 2, hp: 200, sight: 5, pop: 0, dropoff: true, trains: [], attack: 0, attackSec: 0, rangeTiles: 0 },
   house: { name: 'House', wood: 30, buildSec: 15, size: 2, hp: 150, sight: 4, pop: 5, dropoff: false, trains: [], attack: 0, attackSec: 0, rangeTiles: 0 },
-  barracks: { name: 'Barracks', wood: 150, buildSec: 40, size: 2, hp: 350, sight: 5, pop: 0, dropoff: false, trains: ['swordsman', 'archer', 'cavalry'], attack: 0, attackSec: 0, rangeTiles: 0 },
+  barracks: { name: 'Barracks', wood: 150, buildSec: 40, size: 2, hp: 350, sight: 5, pop: 0, dropoff: false, trains: ['swordsman', 'archer'], attack: 0, attackSec: 0, rangeTiles: 0 },
+  stable: { name: 'Stable', wood: 125, buildSec: 35, size: 2, hp: 300, sight: 5, pop: 0, dropoff: false, trains: ['cavalry', 'scout'], attack: 0, attackSec: 0, rangeTiles: 0 },
 };
 
 export interface UnitStats {
@@ -83,6 +84,7 @@ export const UNITS: Record<UnitType, UnitStats> = {
   villager: { name: 'Villager', food: 50, wood: 0, hp: 25, attack: 2, attackSec: 1.5, rangeTiles: 0, speed: 1.6, trainSec: 10, sight: 5, bonus: {}, vsBuildings: 1 },
   swordsman: { name: 'Swordsman', food: 50, wood: 25, hp: 60, attack: 6, attackSec: 1, rangeTiles: 0, speed: 1.4, trainSec: 15, sight: 5, bonus: { cavalry: 4 }, vsBuildings: 1.5 },
   archer: { name: 'Archer', food: 40, wood: 40, hp: 30, attack: 4, attackSec: 1, rangeTiles: 5, speed: 1.6, trainSec: 15, sight: 7, bonus: { swordsman: 4 }, vsBuildings: 0.5 },
+  scout: { name: 'Scout', food: 60, wood: 0, hp: 45, attack: 2, attackSec: 1.2, rangeTiles: 3, speed: 3.0, trainSec: 15, sight: 9, bonus: {}, vsBuildings: 0.3 },
   cavalry: { name: 'Cavalry', food: 80, wood: 30, hp: 70, attack: 5, attackSec: 1, rangeTiles: 0, speed: 2.6, trainSec: 20, sight: 6, bonus: { archer: 4 }, vsBuildings: 1 },
 };
 

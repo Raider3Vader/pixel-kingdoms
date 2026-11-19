@@ -949,7 +949,8 @@ function updateUnit(w: World, u: Entity, dt: number): void {
   const soldier = u.type !== 'villager';
   const sight = UNITS[u.type as UnitType].sight * T;
 
-  if (soldier && (o.type === 'idle' || (o.type === 'move' && o.attackMove))) {
+  // scouts explore: they only fight when attacked or told to
+  if (soldier && u.type !== 'scout' && (o.type === 'idle' || (o.type === 'move' && o.attackMove))) {
     u.scanT -= dt;
     if (u.scanT <= 0) {
       u.scanT = SIM.scanSec;

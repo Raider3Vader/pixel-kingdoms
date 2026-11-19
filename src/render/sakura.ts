@@ -251,7 +251,38 @@ function pagoda(px: Px, team: number, H: number): void {
   px(cx, y - 18, 1, 1, '#fff2b0');
 }
 
+const HORSE = { body: '#6b4329', bodyD: '#4e2f1d', bodyL: '#8a5a3a', mane: '#1f1712', white: '#f1ece0' };
+function horseHead(px: Px, x: number, y: number): void {
+  px(x, y + 1, 4, 3, HORSE.body);
+  px(x + 3, y + 2, 2, 2, HORSE.body);
+  px(x + 4, y + 3, 1, 1, HORSE.mane);
+  px(x + 2, y + 1, 1, 1, JP.ol);
+  px(x + 3, y + 1, 1, 2, HORSE.white);
+  px(x, y, 1, 1, HORSE.body);
+  px(x - 1, y + 1, 1, 3, HORSE.mane);
+}
+/** Long wooden barn (umaya) with three stalls. */
+function stable(px: Px, team: number): void {
+  const c = ROOF[team];
+  const t = TEAMS[team];
+  px(3, 45, 44, 4, SH);
+  base3q(px, 4, 43, 36, 3, 4);
+  wall3q(px, 5, 28, 34, 15, 5, JP.woodL, JP.wood);
+  for (let x = 5; x < 39; x += 2) px(x, 28, 1, 15, JP.wood);
+  for (let i = 0; i < 5; i++) px(39 + i, 28 - Math.floor((i + 1) / 2), 1, 15, JP.woodD);
+  for (const sx of [8, 18, 28]) {
+    px(sx, 32, 8, 11, '#2e1d14');
+    px(sx, 37, 8, 1, JP.woodL);
+    horseHead(px, sx + 2, 33);
+  }
+  roof3q(px, 22, 23, 14, 27, 12, 3, c);
+  nobori(px, 44, 18, 26, t);
+  px(0, 38, 5, 5, JP.straw);
+  px(0, 40, 5, 1, JP.strawD);
+}
+
 export function buildingSprite(type: string, team: number): HTMLCanvasElement {
+  if (type === 'stable') return make(`stable:${team}`, 50, 50, (px) => stable(px, team));
   if (type === 'townCenter') return make(`tc:${team}`, 58, 86, (px) => pagoda(px, team, 86));
   const w = type === 'barracks' ? 44 : 42;
   return make(`b:${type}:${team}`, w, 50, (px) => {
@@ -448,8 +479,87 @@ function cavalry(px: Px, t: Team3, pose: Pose, frame: number): void {
   }
 }
 
-export function unitSprite(type: string, team: number, pose: Pose, frame: number, carry: string): HTMLCanvasElement {
+function legs4(px: Px, frame: number, x0: number, y: number): void {
+  const xs = frame ? [x0, x0 + 3, x0 + 8, x0 + 11] : [x0 + 1, x0 + 3, x0 + 8, x0 + 10];
+  xs.forEach((x, i) => px(x, y, 1, frame && (i === 1 || i === 2) ? 2 : 3, HORSE.bodyD));
+}
+/** Scout: a light horse archer in hunting clothes. */
+function scout(px: Px, t: Team3, pose: Pose, frame: number): void {
+  px(2, 15, 15, 2, SH);
+  legs4(px, pose === 'walk' ? frame : 0, 3, 13);
+  px(2, 9, 1, 5, HORSE.mane);
+  px(3, 9, 12, 4, HORSE.body);
+  px(4, 12, 10, 1, HORSE.bodyD);
+  px(12, 6, 3, 4, HORSE.body);
+  px(13, 4, 4, 3, HORSE.body);
+  px(15, 5, 1, 2, HORSE.white);
+  px(14, 5, 1, 1, JP.ol);
+  px(12, 4, 1, 4, HORSE.mane);
+  px(5, 9, 6, 3, t.m);
+  px(5, 9, 6, 1, t.l);
+  px(5, 12, 1, 1, t.l);
+  px(10, 12, 1, 1, t.l);
+  px(7, 4, 4, 5, t.l);
+  px(7, 6, 4, 1, t.d);
+  px(8, 2, 3, 2, JP.skin);
+  px(10, 2, 1, 1, JP.ol);
+  px(7, 1, 5, 1, JP.black);
+  px(8, 0, 3, 1, JP.black);
+  if (pose === 'attack' && frame === 1) {
+    px(15, 0, 1, 10, JP.woodL);
+    for (const [x, y] of [
+      [14, 1],
+      [13, 3],
+      [12, 5],
+      [13, 7],
+      [14, 9],
+    ])
+      px(x, y, 1, 1, JP.plasterD);
+    px(11, 5, 7, 1, JP.plaster);
+  } else {
+    px(13, 0, 1, 11, JP.woodL);
+    px(12, 0, 1, 11, JP.plasterD);
+  }
+  px(5, 4, 2, 5, JP.woodL);
+}
+/** Heavy cavalry: horse in team-colored scale armor, rider with horned helmet and naginata. */
+function armored(px: Px, t: Team3, pose: Pose, frame: number): void {
+  px(2, 16, 16, 2, SH);
+  legs4(px, pose === 'walk' ? frame : 0, 3, 14);
+  px(2, 10, 1, 5, HORSE.mane);
+  px(3, 10, 12, 4, t.d);
+  for (let x = 3; x < 15; x += 2) px(x, 11, 1, 1, t.l);
+  for (let x = 4; x < 15; x += 2) px(x, 13, 1, 1, t.m);
+  px(12, 7, 3, 4, t.d);
+  px(13, 5, 4, 3, JP.gold);
+  px(15, 6, 2, 2, HORSE.body);
+  px(14, 6, 1, 1, JP.ol);
+  px(12, 5, 1, 4, HORSE.mane);
+  px(7, 5, 4, 5, t.d);
+  px(7, 6, 4, 1, t.l);
+  px(7, 8, 4, 1, t.m);
+  px(6, 5, 1, 3, t.m);
+  px(8, 3, 3, 2, JP.skin);
+  px(10, 3, 1, 1, JP.ol);
+  px(7, 2, 5, 1, JP.black);
+  px(6, 1, 1, 2, JP.gold);
+  px(11, 1, 1, 2, JP.gold);
+  px(5, 0, 1, 1, JP.gold);
+  px(12, 0, 1, 1, JP.gold);
+  if (pose === 'attack' && frame === 1) {
+    px(9, 7, 9, 1, JP.woodD);
+    px(18, 6, 3, 1, JP.blade);
+    px(19, 7, 2, 1, JP.blade);
+  } else {
+    px(14, 1, 1, 10, JP.woodD);
+    px(15, 0, 1, 3, JP.blade);
+  }
+}
+
+export function unitSprite(type: string, team: number, pose: Pose, frame: number, carry: string, variant = 0): HTMLCanvasElement {
   const t = TEAMS[team] ?? TEAMS[2];
+  if (type === 'scout') return make(`u:scout:${team}:${pose}:${frame}`, 20, 18, (px) => scout(px, t, pose, frame));
+  if (type === 'cavalry' && variant % 2 === 1) return make(`u:hcav:${team}:${pose}:${frame}`, 22, 19, (px) => armored(px, t, pose, frame));
   if (type === 'cavalry') return make(`u:cav:${team}:${pose}:${frame}`, 20, 18, (px) => cavalry(px, t, pose, frame));
   return make(`u:${type}:${team}:${pose}:${frame}:${carry}`, 18, 18, (px) => {
     if (type === 'villager') villager(px, t, pose, frame, carry);
@@ -460,8 +570,9 @@ export function unitSprite(type: string, team: number, pose: Pose, frame: number
 
 export function corpseSprite(type: string, team: number): HTMLCanvasElement {
   const t = TEAMS[team] ?? TEAMS[2];
-  return make(`c:${type}:${team}`, type === 'cavalry' ? 20 : 18, 18, (px) => {
-    if (type === 'cavalry') {
+  const horse = type === 'cavalry' || type === 'scout';
+  return make(`c:${type}:${team}`, horse ? 20 : 18, 18, (px) => {
+    if (horse) {
       px(2, 12, 13, 3, JP.horse);
       px(14, 12, 3, 2, JP.horse);
       px(5, 10, 6, 2, t.d);

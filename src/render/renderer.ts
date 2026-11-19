@@ -312,7 +312,7 @@ export function drawWorld(ctx: CanvasRenderingContext2D, w: World, terrain: HTML
         else if (pose === 'work') frame = Math.floor(u.animT * 3) % 2;
         else if (pose === 'attack') frame = u.cooldown > 0 && u.cooldown > (u.type === 'villager' ? 1.2 : 0.75) ? 1 : 0;
         const carry = u.type === 'villager' && u.carry >= 1 ? (u.carryKind ?? '') : '';
-        const spr = unitSprite(u.type, u.team, pose, frame, carry);
+        const spr = unitSprite(u.type, u.team, pose, frame, carry, u.id);
         drawFlipped(ctx, spr, Math.round(u.x) - Math.floor(spr.width / 2), Math.round(u.y) - spr.height + 3, u.facing < 0);
       },
     });

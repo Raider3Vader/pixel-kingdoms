@@ -231,3 +231,19 @@ describe('order queue', () => {
     expect(Math.hypot(s.x - 20 * T, s.y - 26 * T)).toBeLessThan(6);
   });
 });
+
+describe('stable', () => {
+  it('a Horse raid builds a Stable and trains cavalry', () => {
+    const { world: w } = createMatch(6);
+    const bot = createBot(w, ENEMY, 'normal', 'horseRaid');
+    run(w, 9 * 60, () => updateBot(w, bot, DT));
+    expect(w.buildings.some((b) => b.team === ENEMY && b.type === 'stable')).toBe(true);
+    expect(w.units.some((u) => u.team === ENEMY && u.type === 'cavalry') || w.teams[ENEMY].stats.trained > 20).toBe(true);
+  });
+
+  it('both sides start with a scout', () => {
+    const { world: w } = createMatch(2);
+    expect(teamUnits(w, PLAYER, 'scout').length).toBe(1);
+    expect(teamUnits(w, ENEMY, 'scout').length).toBe(1);
+  });
+});

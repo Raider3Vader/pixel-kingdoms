@@ -47,11 +47,13 @@ const $ = <E extends HTMLElement>(id: string): E => document.getElementById(id) 
 const TIPS: Record<string, string> = {
   house: '+5 population.',
   storehouse: 'Drop-off for food and wood. Build it next to trees or berries to cut walking time.',
-  barracks: 'Trains Swordsmen, Archers and Cavalry.',
+  barracks: 'Trains Swordsmen and Archers.',
+  stable: 'Trains Cavalry and Scouts.',
   villager: 'Gathers food and wood, and builds.',
   swordsman: 'Tough frontline. Beats Cavalry, loses to Archers. Good against buildings.',
   archer: 'Shoots from 5 tiles. Beats Swordsmen, loses to Cavalry.',
   cavalry: 'Fast raider. Beats Archers, loses to Swordsmen.',
+  scout: 'Very fast and sees far. Weak arrows from 3 tiles. Explores without picking fights.',
 };
 
 function icon(type: string, team: number, size: number): HTMLCanvasElement {
@@ -355,9 +357,9 @@ export class Game {
     if (sel.length === 0) return out;
     const vills = sel.filter((e) => e.type === 'villager');
     const soldiers = sel.filter(isSoldier);
-    const keys = ['Z', 'X', 'C'];
+    const keys = ['Z', 'X', 'C', 'V'];
     if (vills.length) {
-      (['house', 'storehouse', 'barracks'] as BuildingType[]).forEach((b, i) => {
+      (['house', 'storehouse', 'barracks', 'stable'] as BuildingType[]).forEach((b, i) => {
         const s = BUILDINGS[b];
         out.push({
           key: keys[i],

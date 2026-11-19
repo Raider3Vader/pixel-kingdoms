@@ -251,14 +251,52 @@ function cavalry(px: Px, tc: TeamColors, pose: UnitPose, frame: number): void {
   }
 }
 
-export function unitSprite(type: string, team: number, pose: UnitPose, frame: number, carry: string): HTMLCanvasElement {
-  if (theme === 'sakura') return Sakura.unitSprite(type, team, pose, frame, carry);
+/** Classic scout: a light rider in a cap with a short bow. */
+function scout(px: Px, tc: TeamColors, pose: UnitPose, frame: number): void {
+  const horse = '#a0703f';
+  px(2, 14, 13, 2, SHADOW);
+  const lc = PAL.hair;
+  if (pose === 'walk' && frame === 1) {
+    px(3, 12, 1, 3, lc);
+    px(6, 12, 1, 2, lc);
+    px(10, 12, 1, 2, lc);
+    px(13, 12, 1, 3, lc);
+  } else {
+    px(4, 12, 1, 3, lc);
+    px(6, 12, 1, 3, lc);
+    px(10, 12, 1, 3, lc);
+    px(12, 12, 1, 3, lc);
+  }
+  px(2, 8, 1, 4, PAL.hair);
+  px(3, 8, 10, 4, horse);
+  px(11, 5, 3, 4, horse);
+  px(12, 3, 4, 3, horse);
+  px(15, 5, 1, 1, PAL.ink);
+  px(13, 4, 1, 1, PAL.ink);
+  px(11, 3, 1, 4, PAL.hair);
+  px(5, 8, 5, 2, tc.light);
+  px(6, 3, 3, 5, tc.light);
+  px(6, 0, 3, 3, PAL.skin);
+  px(6, 0, 3, 1, tc.mid);
+  px(8, 1, 1, 1, PAL.ink);
+  if (pose === 'attack' && frame === 1) {
+    px(11, 1, 1, 7, PAL.wood);
+    px(9, 4, 4, 1, PAL.white);
+  } else {
+    px(10, 1, 1, 7, PAL.wood);
+    px(9, 2, 1, 5, PAL.silver);
+  }
+}
+
+export function unitSprite(type: string, team: number, pose: UnitPose, frame: number, carry: string, variant = 0): HTMLCanvasElement {
+  if (theme === 'sakura') return Sakura.unitSprite(type, team, pose, frame, carry, variant);
   const key = `u:${type}:${team}:${pose}:${frame}:${carry}`;
   const tc = TEAM[team] ?? TEAM[2];
   return make(key, 16, 16, (px) => {
     if (type === 'villager') villager(px, tc, pose, frame, carry);
     else if (type === 'swordsman') swordsman(px, tc, pose, frame);
     else if (type === 'archer') archer(px, tc, pose, frame);
+    else if (type === 'scout') scout(px, tc, pose, frame);
     else cavalry(px, tc, pose, frame);
   });
 }
@@ -267,7 +305,7 @@ export function corpseSprite(type: string, team: number): HTMLCanvasElement {
   if (theme === 'sakura') return Sakura.corpseSprite(type, team);
   const tc = TEAM[team] ?? TEAM[2];
   return make(`c:${type}:${team}`, 16, 16, (px) => {
-    if (type === 'cavalry') {
+    if (type === 'cavalry' || type === 'scout') {
       px(2, 11, 11, 3, '#7a4a2a');
       px(12, 11, 3, 2, '#7a4a2a');
       px(4, 9, 5, 2, tc.mid);
@@ -442,6 +480,22 @@ function barracks(px: Px, tc: TeamColors): void {
   px(27, 3, 3, 1, tc.mid);
 }
 
+function stable(px: Px, tc: TeamColors): void {
+  px(1, 37, 31, 3, SHADOW);
+  px(2, 22, 28, 15, PAL.woodLight);
+  for (let x = 2; x < 30; x += 3) px(x, 22, 1, 15, PAL.wood);
+  for (const sx of [4, 13, 22]) {
+    px(sx, 26, 7, 11, '#3d2a1a');
+    px(sx, 30, 7, 1, PAL.woodLight);
+    px(sx + 2, 27, 4, 3, '#7a4a2a');
+    px(sx + 5, 28, 1, 1, PAL.ink);
+    px(sx + 1, 27, 1, 3, PAL.hair);
+  }
+  roof(px, 16, 12, 10, 10, 0.6, tc);
+  px(0, 33, 4, 4, PAL.yellow);
+  px(0, 34, 4, 1, PAL.dirt);
+}
+
 function townCenter(px: Px, tc: TeamColors): void {
   px(2, 53, 45, 3, SHADOW);
   stoneWall(px, 3, 41, 42, 13);
@@ -475,6 +529,7 @@ export function buildingSprite(type: string, team: number): HTMLCanvasElement {
     if (type === 'house') house(px, tc);
     else if (type === 'storehouse') storehouse(px, tc);
     else if (type === 'barracks') barracks(px, tc);
+    else if (type === 'stable') stable(px, tc);
     else townCenter(px, tc);
   });
 }
@@ -494,7 +549,7 @@ export function foundationSprite(size: number): HTMLCanvasElement {
 
 /** A 16 x 16 icon for the HUD. */
 export function iconFor(type: string, team = 0): HTMLCanvasElement {
-  if (type === 'villager' || type === 'swordsman' || type === 'archer' || type === 'cavalry') return unitSprite(type, team, 'idle', 0, '');
+  if (type === 'villager' || type === 'swordsman' || type === 'archer' || type === 'cavalry' || type === 'scout') return unitSprite(type, team, 'idle', 0, '');
   if (type === 'tree') return treeSprite(0);
   if (type === 'berries') return berrySprite(6);
   if (type === 'sheep') return sheepSprite(0);

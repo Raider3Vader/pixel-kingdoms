@@ -174,7 +174,7 @@ function economy(w: World, bot: Bot, tc: Entity): void {
 
   // houses
   const houseBuilding = unfinished.some((b) => b.type === 'house');
-  const margin = 2 + teamBuildings(w, bot.team, 'barracks', true).length * 2;
+  const margin = 2 + (teamBuildings(w, bot.team, 'barracks', true).length + teamBuildings(w, bot.team, 'stable', true).length) * 2;
   const forgets = bot.diffKey === 'easy' && w.rng() < 0.5;
   if (!houseBuilding && !forgets && team.popCap < 100 && team.popCap - team.popUsed <= margin) {
     tryBuild(w, bot, 'house', tc.x, tc.y, 4, 10);
@@ -194,12 +194,20 @@ function economy(w: World, bot: Bot, tc: Entity): void {
     }
   }
 
-  // barracks
-  const barracks = teamBuildings(w, bot.team, 'barracks');
+  // military buildings: whichever the opening's army needs first, then the other
   const toward = { x: tc.x + (w.w * T / 2 - tc.x) * 0.25, y: tc.y + (w.h * T / 2 - tc.y) * 0.25 };
-  if (barracks.length === 0 && vills.length >= bot.opening.barracksAtVillagers) {
-    tryBuild(w, bot, 'barracks', toward.x, toward.y, 2, 9);
-  } else if (barracks.length === 1 && bot.diffKey !== 'easy' && vills.length >= 20) {
+  const foot = (types: string[]): boolean => types.some((k) => k === 'swordsman' || k === 'archer');
+  const firstMix = Object.keys(bot.opening.mix);
+  const allMix = [...firstMix, ...Object.keys(bot.opening.mixAfter)];
+  const first: BuildingType = foot(firstMix) ? 'barracks' : 'stable';
+  const second: BuildingType = first === 'barracks' ? 'stable' : 'barracks';
+  const needSecond = second === 'stable' ? allMix.includes('cavalry') : foot(allMix);
+  const count = (t: BuildingType): number => teamBuildings(w, bot.team, t).length;
+  if (count(first) === 0 && vills.length >= bot.opening.barracksAtVillagers) {
+    tryBuild(w, bot, first, toward.x, toward.y, 2, 9);
+  } else if (count(first) > 0 && count(second) === 0 && needSecond && vills.length >= bot.opening.barracksAtVillagers + 5) {
+    tryBuild(w, bot, second, toward.x, toward.y, 2, 10);
+  } else if (count('barracks') === 1 && bot.diffKey !== 'easy' && vills.length >= 20) {
     tryBuild(w, bot, 'barracks', toward.x, toward.y, 2, 10);
   }
 }
@@ -210,9 +218,11 @@ function military(w: World, bot: Bot): void {
   const tc = home(w, bot);
   const villagersWanted = vills < bot.diff.villagerTarget && !(bot.opening.earlyVillagerCap !== null && bot.attacksSent === 0 && vills >= bot.opening.earlyVillagerCap);
   const mix = bot.attacksSent === 0 ? bot.opening.mix : bot.opening.mixAfter;
-  const soldiers = w.units.filter((u) => !u.dead && u.team === bot.team && isSoldier(u));
-  for (const b of teamBuildings(w, bot.team, 'barracks', true)) {
+  const soldiers = w.units.filter((u) => !u.dead && u.team === bot.team && isSoldier(u) && u.type !== 'scout');
+  const trainers = w.buildings.filter((b) => !b.dead && b.team === bot.team && b.progress >= 1 && (b.type === 'barracks' || b.type === 'stable'));
+  for (const b of trainers) {
     if (b.queue.length >= 2) continue;
+    const canTrain = BUILDINGS[b.type as BuildingType].trains;
     // pick the unit type furthest below its share of the mix
     const counts: Record<string, number> = {};
     for (const s of soldiers) counts[s.type] = (counts[s.type] ?? 0) + 1;
@@ -222,6 +232,7 @@ function military(w: World, bot: Bot): void {
     let pick: UnitType | null = null;
     let worst = -Infinity;
     for (const [k, wt] of Object.entries(mix) as [UnitType, number][]) {
+      if (!canTrain.includes(k)) continue;
       const deficit = wt / wsum - (counts[k] ?? 0) / total;
       if (deficit > worst) {
         worst = deficit;
@@ -240,7 +251,7 @@ function playerTargets(w: World, bot: Bot): Entity[] {
 }
 
 function attack(w: World, bot: Bot, tc: Entity): void {
-  const army = w.units.filter((u) => !u.dead && u.team === bot.team && isSoldier(u) && !bot.defending.has(u.id));
+  const army = w.units.filter((u) => !u.dead && u.team === bot.team && isSoldier(u) && u.type !== 'scout' && !bot.defending.has(u.id));
   const idle = army.filter((u) => u.order.type === 'idle');
   if (idle.length < bot.attackSize || w.time < bot.diff.firstAttackSec) return;
   const targets = playerTargets(w, bot);

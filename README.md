@@ -18,7 +18,7 @@ Archers beat Swordsmen, Cavalry beats Archers, Swordsmen beat Cavalry.
 | --- | --- |
 | Left click / drag | Select units (double click: all of that type on screen) |
 | Right click | Move, gather, build or attack; with a building selected, set its rally point |
-| Z X C | The command buttons (build, train, attack-move, stop) |
+| Z X C V | The command buttons (build, train, attack-move, stop) |
 | Shift | Add to the selection, or keep placing buildings |
 | Shift + right click | Queue orders: waypoints for a scout, or gather one tree then a sheep |
 | W A S D, arrows, screen edge | Move the camera |
