@@ -291,11 +291,17 @@ export function nearestDropoff(w: World, team: number, x: number, y: number): En
   return best;
 }
 
+/** True if a resource has at least one open tile next to it (so it can be reached). */
+export function exposed(w: World, r: Entity): boolean {
+  for (let dy = -1; dy <= 1; dy++) for (let dx = -1; dx <= 1; dx++) if ((dx || dy) && !w.isBlocked(r.tx + dx, r.ty + dy)) return true;
+  return false;
+}
+
 export function nearestResource(w: World, x: number, y: number, match: (r: Entity) => boolean, maxDist = Infinity): Entity | null {
   let best: Entity | null = null;
   let bd = maxDist;
   for (const r of w.resources) {
-    if (r.dead || !match(r)) continue;
+    if (r.dead || !match(r) || !exposed(w, r)) continue;
     const d = Math.hypot(r.x - x, r.y - y);
     if (d < bd) {
       bd = d;

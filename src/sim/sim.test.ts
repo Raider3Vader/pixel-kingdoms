@@ -167,3 +167,17 @@ describe('enemy kingdom', () => {
     expect(w.winner).toBe(PLAYER);
   }, 120_000);
 });
+
+describe('pathing', () => {
+  it('a villager sent into a dense forest switches to a reachable tree', () => {
+    const w = testWorld();
+    for (let y = 20; y < 27; y++) for (let x = 20; x < 27; x++) spawnResource(w, 'tree', x, y);
+    spawnBuilding(w, 'storehouse', PLAYER, 17, 22, true);
+    const inner = w.resources.find((r) => r.tx === 23 && r.ty === 23)!;
+    const v = spawnUnit(w, 'villager', PLAYER, 16 * T, 21 * T);
+    const before = w.teams[PLAYER].wood;
+    orderGather(w, [v], inner);
+    run(w, 60);
+    expect(w.teams[PLAYER].wood).toBeGreaterThan(before);
+  });
+});
