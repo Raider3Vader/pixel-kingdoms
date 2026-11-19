@@ -24,7 +24,10 @@ try {
 }
 
 function fit(): void {
-  const s = integerScale(window.innerWidth, window.innerHeight, RENDER.width, RENDER.height);
+  let s = integerScale(window.innerWidth, window.innerHeight, RENDER.width, RENDER.height);
+  // smaller than one game screen (a phone): shrink to fit, even if pixels soften
+  const fitS = Math.min(window.innerWidth / RENDER.width, window.innerHeight / RENDER.height);
+  if (fitS < 1) s = Math.floor(fitS * 100) / 100;
   document.documentElement.style.setProperty('--s', String(s));
 }
 window.addEventListener('resize', fit);

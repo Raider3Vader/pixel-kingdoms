@@ -116,6 +116,6 @@ export interface Opening {
 export const OPENINGS: Record<OpeningKey, Opening> = {
   boom: { name: 'Boom', foodShare: 0.55, barracksAtVillagers: 18, earlyVillagerCap: null, maxStorehouses: 3, mix: { swordsman: 2, archer: 2, cavalry: 1 }, mixAfter: { swordsman: 2, archer: 2, cavalry: 1 }, firstAttackSize: 12, attackGrow: 3 },
   rush: { name: 'Rush', foodShare: 0.6, barracksAtVillagers: 7, earlyVillagerCap: 10, maxStorehouses: 1, mix: { swordsman: 1 }, mixAfter: { swordsman: 2, archer: 1 }, firstAttackSize: 4, attackGrow: 2 },
-  archers: { name: 'Archer line', foodShare: 0.45, barracksAtVillagers: 11, earlyVillagerCap: null, maxStorehouses: 2, mix: { archer: 3, swordsman: 1 }, mixAfter: { archer: 2, swordsman: 1, cavalry: 1 }, firstAttackSize: 7, attackGrow: 3 },
-  horseRaid: { name: 'Horse raid', foodShare: 0.6, barracksAtVillagers: 11, earlyVillagerCap: null, maxStorehouses: 2, mix: { cavalry: 1 }, mixAfter: { cavalry: 1, swordsman: 1, archer: 1 }, firstAttackSize: 3, attackGrow: 2 },
+  archers: { name: 'Archer line', foodShare: 0.5, barracksAtVillagers: 9, earlyVillagerCap: null, maxStorehouses: 2, mix: { archer: 3, swordsman: 1 }, mixAfter: { archer: 2, swordsman: 1, cavalry: 1 }, firstAttackSize: 7, attackGrow: 3 },
+  horseRaid: { name: 'Horse raid', foodShare: 0.65, barracksAtVillagers: 9, earlyVillagerCap: null, maxStorehouses: 2, mix: { cavalry: 1 }, mixAfter: { cavalry: 1, swordsman: 1, archer: 1 }, firstAttackSize: 4, attackGrow: 2 },
 };

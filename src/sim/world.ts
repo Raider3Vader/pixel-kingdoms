@@ -973,7 +973,8 @@ function spawnPoint(w: World, b: Entity): Pt {
   const ty0 = b.ty - 1;
   const tx1 = b.tx + b.size;
   const ty1 = b.ty + b.size;
-  const aim = b.rally ?? { x: b.x, y: (b.ty + b.size + 2) * T };
+  // without a rally point, new units step out on the side facing the map center
+  const aim = b.rally ?? { x: b.x + Math.sign(w.w * T / 2 - b.x) * 40, y: b.y + Math.sign(w.h * T / 2 - b.y) * 40 };
   let best: Pt | null = null;
   let bd = Infinity;
   for (let y = ty0; y <= ty1; y++) {
@@ -1103,9 +1104,16 @@ export function visibleTo(w: World, team: number, e: Entity): boolean {
 export function step(w: World, dt: number): void {
   if (w.winner !== null) return;
   w.time += dt;
-  for (const b of w.buildings) if (!b.dead) updateBuilding(w, b, dt);
-  for (let i = 0; i < w.units.length; i++) {
-    const u = w.units[i];
+  // alternate the update order every tick so neither side always acts first
+  const flip = Math.round(w.time / dt) % 2 === 1;
+  const bs = w.buildings;
+  for (let k = 0; k < bs.length; k++) {
+    const b = bs[flip ? bs.length - 1 - k : k];
+    if (!b.dead) updateBuilding(w, b, dt);
+  }
+  const us = w.units.slice();
+  for (let k = 0; k < us.length; k++) {
+    const u = us[flip ? us.length - 1 - k : k];
     if (!u.dead) updateUnit(w, u, dt);
   }
   separate(w);

@@ -247,9 +247,9 @@ function attack(w: World, bot: Bot, tc: Entity): void {
   if (targets.length === 0) return;
   let goal: Entity;
   if (bot.openingKey === 'horseRaid' && bot.attacksSent === 0) {
-    // raid the drop-off with the most villagers around it
+    // raid the enemy drop-off closest to us (usually an outlying Storehouse)
     const drops = targets.filter((b) => BUILDINGS[b.type as BuildingType].dropoff);
-    goal = drops.sort((a, b) => b.ty + b.tx - (a.ty + a.tx))[0] ?? targets[0];
+    goal = drops.sort((a, b) => Math.hypot(a.x - tc.x, a.y - tc.y) - Math.hypot(b.x - tc.x, b.y - tc.y))[0] ?? targets[0];
   } else {
     goal = targets.sort((a, b) => Math.hypot(a.x - tc.x, a.y - tc.y) - Math.hypot(b.x - tc.x, b.y - tc.y))[0];
   }
@@ -286,7 +286,7 @@ function defend(w: World, bot: Bot, tc: Entity): void {
     if (bot.fleeing.has(v.id)) continue;
     if (threats.some((t) => Math.hypot(t.x - v.x, t.y - v.y) < 4 * T)) {
       bot.fleeing.add(v.id);
-      setOrder(v, { type: 'move', x: tc.x + (w.rng() - 0.5) * 24, y: tc.y + 30, attackMove: false });
+      setOrder(v, { type: 'move', x: tc.x + (w.rng() - 0.5) * 24, y: tc.y + Math.sign(tc.y - v.y || 1) * 30, attackMove: false });
     }
   }
 }
