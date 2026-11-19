@@ -92,11 +92,13 @@ export interface Difficulty {
   villagerTarget: number;
   mistakeChance: number; // chance to skip a decision
   reactSec: number; // delay before it responds to a raid
+  armyScale: number; // multiplies the army size it waits for before attacking
+  firstAttackSec: number; // it never attacks before this game time
 }
 export const DIFFICULTY: Record<DifficultyKey, Difficulty> = {
-  easy: { name: 'Easy', decideSec: 4, villagerTarget: 15, mistakeChance: 0.35, reactSec: 12 },
-  normal: { name: 'Normal', decideSec: 2, villagerTarget: 22, mistakeChance: 0.1, reactSec: 6 },
-  hard: { name: 'Hard', decideSec: 0.5, villagerTarget: 30, mistakeChance: 0, reactSec: 1 },
+  easy: { name: 'Easy', decideSec: 4, villagerTarget: 15, mistakeChance: 0.35, reactSec: 12, armyScale: 0.75, firstAttackSec: 420 },
+  normal: { name: 'Normal', decideSec: 2, villagerTarget: 22, mistakeChance: 0.1, reactSec: 6, armyScale: 1, firstAttackSec: 300 },
+  hard: { name: 'Hard', decideSec: 0.5, villagerTarget: 30, mistakeChance: 0, reactSec: 1, armyScale: 1.25, firstAttackSec: 0 },
 };
 
 export type OpeningKey = 'boom' | 'rush' | 'archers' | 'horseRaid';

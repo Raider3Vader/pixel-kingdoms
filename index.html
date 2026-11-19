@@ -4,14 +4,100 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Pixel Kingdoms</title>
-    <style>
-      html, body { margin: 0; height: 100%; background: #0d0d14; overflow: hidden; }
-      body { display: flex; align-items: center; justify-content: center; }
-      canvas { image-rendering: pixelated; image-rendering: crisp-edges; display: block; }
-    </style>
   </head>
   <body>
-    <canvas id="game"></canvas>
+    <div id="stage">
+      <canvas id="game"></canvas>
+
+      <div id="hud" class="hidden">
+        <div id="topbar">
+          <span class="res"><i class="sw food"></i><b id="r-food">0</b></span>
+          <span class="res"><i class="sw wood"></i><b id="r-wood">0</b></span>
+          <span class="res"><i class="sw pop"></i><b id="r-pop">0/0</b></span>
+          <button id="idle-btn" class="res" title="Select next idle villager (.)"><i class="sw idle"></i><b id="r-idle">0</b> idle</button>
+          <span class="spacer"></span>
+          <span id="r-time">00:00</span>
+          <button id="menu-btn" title="Pause (Esc)">Menu</button>
+        </div>
+        <div id="panel">
+          <div id="info"></div>
+          <div id="cmds"></div>
+          <canvas id="minimap" width="64" height="64"></canvas>
+        </div>
+        <div id="toast"></div>
+        <div id="tooltip" class="hidden"></div>
+      </div>
+
+      <div id="menu" class="screen">
+        <div class="card">
+          <h1>Pixel Kingdoms</h1>
+          <p class="sub">Grow a village. Raise an army. Break the rival kingdom.</p>
+          <div class="label">Difficulty</div>
+          <div id="diff" class="choices">
+            <button data-d="easy">Easy</button>
+            <button data-d="normal" class="on">Normal</button>
+            <button data-d="hard">Hard</button>
+          </div>
+          <p class="hint" id="diff-hint"></p>
+          <button id="start" class="big">Start</button>
+          <div class="row">
+            <button id="help-btn">Controls</button>
+            <button id="mute-btn">Sound: on</button>
+          </div>
+          <p class="hint" id="touch-note" hidden>Pixel Kingdoms needs a mouse and keyboard for now. Touch controls are coming later.</p>
+        </div>
+      </div>
+
+      <div id="pause" class="screen hidden">
+        <div class="card">
+          <h2>Paused</h2>
+          <button id="resume" class="big">Resume</button>
+          <div class="row">
+            <button id="help-btn2">Controls</button>
+            <button id="quit">Quit to menu</button>
+          </div>
+        </div>
+      </div>
+
+      <div id="over" class="screen hidden">
+        <div class="card">
+          <h2 id="over-title">Victory</h2>
+          <p class="sub" id="over-sub"></p>
+          <table id="over-stats"></table>
+          <div class="row">
+            <button id="again" class="big">Play again</button>
+            <button id="to-menu">Menu</button>
+          </div>
+        </div>
+      </div>
+
+      <div id="help" class="screen hidden">
+        <div class="card wide">
+          <h2>Controls</h2>
+          <div class="cols">
+            <dl>
+              <dt>Left click / drag</dt><dd>Select units</dd>
+              <dt>Double click</dt><dd>Select all of that type on screen</dd>
+              <dt>Right click</dt><dd>Move, gather, build or attack</dd>
+              <dt>Shift + click</dt><dd>Add to selection, or place several buildings</dd>
+              <dt>Z X C</dt><dd>The command buttons</dd>
+              <dt>Right click with a building</dt><dd>Set its rally point</dd>
+            </dl>
+            <dl>
+              <dt>W A S D / arrows</dt><dd>Move the camera (or push the screen edge)</dd>
+              <dt>Mouse wheel</dt><dd>Zoom in and out</dd>
+              <dt>H</dt><dd>Select the Town Center</dd>
+              <dt>. (period)</dt><dd>Next idle villager</dd>
+              <dt>Ctrl + 1-9 / 1-9</dt><dd>Save / recall a group</dd>
+              <dt>Space</dt><dd>Center on selection</dd>
+              <dt>M / Esc</dt><dd>Mute / pause</dd>
+            </dl>
+          </div>
+          <p class="hint">Archers beat Swordsmen, Cavalry beats Archers, Swordsmen beat Cavalry. Destroy the enemy Town Center to win.</p>
+          <button id="help-close" class="big">Back</button>
+        </div>
+      </div>
+    </div>
     <script type="module" src="/src/main.ts"></script>
   </body>
 </html>

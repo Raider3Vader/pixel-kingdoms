@@ -1,0 +1,407 @@
+/* All sizes are in internal pixels times --s, the whole-number screen scale. */
+:root {
+  --s: 2;
+  --ink: #1a1c2c;
+  --panel: #262b44;
+  --panel-hi: #3a4466;
+  --edge: #5a6988;
+  --text: #f4f4f4;
+  --dim: #94b0c2;
+  --gold: #ffcd75;
+  --food: #d63a4a;
+  --wood: #c08a52;
+  --pop: #41a6f6;
+  --good: #a7f070;
+  --bad: #ef7d57;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  margin: 0;
+  height: 100%;
+  background: #0d0d14;
+  overflow: hidden;
+  color: var(--text);
+  font-family: 'Press Start 2P', monospace;
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+body {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+#stage {
+  position: relative;
+  width: calc(640px * var(--s));
+  height: calc(360px * var(--s));
+  font-size: calc(8px * var(--s));
+  line-height: 1.25;
+  image-rendering: pixelated;
+}
+
+canvas {
+  image-rendering: pixelated;
+  image-rendering: crisp-edges;
+  display: block;
+}
+
+#game {
+  width: 100%;
+  height: 100%;
+  cursor: default;
+}
+
+button {
+  font: inherit;
+  color: inherit;
+  background: var(--panel-hi);
+  border: calc(1px * var(--s)) solid var(--edge);
+  box-shadow: inset 0 calc(-2px * var(--s)) 0 rgba(0, 0, 0, 0.35);
+  padding: calc(3px * var(--s)) calc(6px * var(--s));
+  cursor: pointer;
+}
+button:hover {
+  background: #4a5680;
+}
+button:active {
+  box-shadow: inset 0 calc(2px * var(--s)) 0 rgba(0, 0, 0, 0.35);
+}
+button:focus-visible {
+  outline: calc(1px * var(--s)) solid var(--gold);
+}
+
+.hidden {
+  display: none !important;
+}
+
+/* ---------- top bar ---------- */
+#topbar {
+  position: absolute;
+  left: 0;
+  top: 0;
+  right: 0;
+  height: calc(12px * var(--s));
+  display: flex;
+  align-items: center;
+  gap: calc(10px * var(--s));
+  padding: 0 calc(4px * var(--s));
+  background: var(--panel);
+  border-bottom: calc(1px * var(--s)) solid var(--edge);
+}
+#topbar .spacer {
+  flex: 1;
+}
+#topbar button {
+  padding: 0 calc(4px * var(--s));
+  height: calc(10px * var(--s));
+  box-shadow: none;
+}
+.res {
+  display: inline-flex;
+  align-items: center;
+  gap: calc(3px * var(--s));
+}
+.res b {
+  font-weight: normal;
+}
+.sw {
+  display: inline-block;
+  width: calc(6px * var(--s));
+  height: calc(6px * var(--s));
+}
+.sw.food {
+  background: var(--food);
+}
+.sw.wood {
+  background: var(--wood);
+}
+.sw.pop {
+  background: var(--pop);
+}
+.sw.idle {
+  background: var(--gold);
+}
+#idle-btn.none {
+  opacity: 0.5;
+}
+.capped {
+  color: var(--bad);
+}
+
+/* ---------- bottom panel ---------- */
+#panel {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: calc(68px * var(--s));
+  display: grid;
+  grid-template-columns: calc(250px * var(--s)) 1fr calc(68px * var(--s));
+  background: var(--panel);
+  border-top: calc(1px * var(--s)) solid var(--edge);
+}
+#info {
+  padding: calc(4px * var(--s));
+  border-right: calc(1px * var(--s)) solid var(--edge);
+  overflow: hidden;
+}
+#cmds {
+  padding: calc(4px * var(--s));
+  display: flex;
+  gap: calc(4px * var(--s));
+  align-items: flex-start;
+}
+#minimap {
+  width: calc(64px * var(--s));
+  height: calc(64px * var(--s));
+  margin: calc(2px * var(--s));
+  cursor: pointer;
+  background: var(--ink);
+}
+
+.cmd {
+  position: relative;
+  width: calc(62px * var(--s));
+  height: calc(46px * var(--s));
+  padding: calc(2px * var(--s));
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: calc(1px * var(--s));
+  font-size: calc(8px * var(--s));
+}
+.cmd canvas {
+  width: calc(24px * var(--s));
+  height: calc(24px * var(--s));
+}
+.cmd .key {
+  position: absolute;
+  top: calc(1px * var(--s));
+  left: calc(2px * var(--s));
+  color: var(--gold);
+}
+.cmd .cost {
+  color: var(--dim);
+  white-space: nowrap;
+}
+.cmd.off {
+  opacity: 0.45;
+}
+.cmd.on {
+  border-color: var(--gold);
+}
+
+.sel-head {
+  display: flex;
+  gap: calc(4px * var(--s));
+  align-items: flex-start;
+}
+.sel-head canvas {
+  width: calc(32px * var(--s));
+  height: calc(32px * var(--s));
+  background: var(--ink);
+  border: calc(1px * var(--s)) solid var(--edge);
+  object-fit: contain;
+}
+.sel-name {
+  color: var(--gold);
+  margin-bottom: calc(2px * var(--s));
+}
+.bar {
+  height: calc(3px * var(--s));
+  background: #73172d;
+  margin: calc(2px * var(--s)) 0;
+  width: calc(110px * var(--s));
+}
+.bar > i {
+  display: block;
+  height: 100%;
+  background: var(--good);
+}
+.bar.prog > i {
+  background: var(--gold);
+}
+.dim {
+  color: var(--dim);
+}
+.warn {
+  color: var(--bad);
+}
+.queue {
+  display: flex;
+  gap: calc(2px * var(--s));
+  margin-top: calc(2px * var(--s));
+  align-items: center;
+}
+.queue button,
+.group button {
+  padding: 0;
+  width: calc(18px * var(--s));
+  height: calc(18px * var(--s));
+  position: relative;
+  box-shadow: none;
+}
+.queue canvas,
+.group canvas {
+  width: calc(16px * var(--s));
+  height: calc(16px * var(--s));
+}
+.group {
+  display: flex;
+  flex-wrap: wrap;
+  gap: calc(2px * var(--s));
+}
+.group button i {
+  position: absolute;
+  left: 0;
+  bottom: 0;
+  height: calc(1px * var(--s));
+  background: var(--good);
+}
+
+#toast {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: calc(74px * var(--s));
+  text-align: center;
+  pointer-events: none;
+}
+#toast div {
+  display: inline-block;
+  margin-top: calc(2px * var(--s));
+  padding: calc(3px * var(--s)) calc(6px * var(--s));
+  background: rgba(26, 28, 44, 0.85);
+  border: calc(1px * var(--s)) solid var(--edge);
+  transition: opacity 0.4s;
+}
+#toast div.alarm {
+  border-color: var(--bad);
+  color: var(--bad);
+}
+
+#tooltip {
+  position: absolute;
+  max-width: calc(200px * var(--s));
+  padding: calc(4px * var(--s));
+  background: rgba(26, 28, 44, 0.95);
+  border: calc(1px * var(--s)) solid var(--edge);
+  pointer-events: none;
+  z-index: 5;
+}
+#tooltip .t {
+  color: var(--gold);
+  margin-bottom: calc(2px * var(--s));
+}
+
+/* ---------- screens ---------- */
+.screen {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(13, 13, 20, 0.55);
+  z-index: 10;
+}
+#menu {
+  background: linear-gradient(rgba(13, 13, 20, 0.15), rgba(13, 13, 20, 0.65));
+}
+.card {
+  background: var(--panel);
+  border: calc(1px * var(--s)) solid var(--edge);
+  box-shadow: 0 0 0 calc(2px * var(--s)) var(--ink);
+  padding: calc(12px * var(--s)) calc(16px * var(--s));
+  width: calc(300px * var(--s));
+  display: flex;
+  flex-direction: column;
+  gap: calc(6px * var(--s));
+  align-items: stretch;
+  text-align: center;
+}
+.card.wide {
+  width: calc(520px * var(--s));
+}
+h1 {
+  margin: 0;
+  font-size: calc(16px * var(--s));
+  font-weight: normal;
+  color: var(--gold);
+  text-shadow: calc(1px * var(--s)) calc(1px * var(--s)) 0 #b13e53;
+}
+h2 {
+  margin: 0;
+  font-size: calc(12px * var(--s));
+  font-weight: normal;
+  color: var(--gold);
+}
+.sub,
+.hint {
+  margin: 0;
+  color: var(--dim);
+}
+.label {
+  margin-top: calc(4px * var(--s));
+}
+.choices,
+.row {
+  display: flex;
+  gap: calc(4px * var(--s));
+}
+.choices button,
+.row button {
+  flex: 1;
+}
+.choices button.on {
+  border-color: var(--gold);
+  color: var(--gold);
+}
+button.big {
+  padding: calc(5px * var(--s));
+  font-size: calc(8px * var(--s));
+  background: #3b5dc9;
+}
+button.big:hover {
+  background: #4d6fe0;
+}
+.cols {
+  display: flex;
+  gap: calc(12px * var(--s));
+  text-align: left;
+}
+dl {
+  margin: 0;
+  flex: 1;
+}
+dt {
+  color: var(--gold);
+  margin-top: calc(4px * var(--s));
+}
+dd {
+  margin: 0;
+  color: var(--dim);
+}
+#over-stats {
+  margin: 0 auto;
+  border-collapse: collapse;
+}
+#over-stats td,
+#over-stats th {
+  padding: calc(2px * var(--s)) calc(6px * var(--s));
+  text-align: right;
+  font-weight: normal;
+}
+#over-stats th {
+  color: var(--dim);
+}
+#over-stats td:first-child {
+  text-align: left;
+  color: var(--dim);
+}

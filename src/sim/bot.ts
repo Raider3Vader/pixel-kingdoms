@@ -59,7 +59,7 @@ export function createBot(w: World, team: number, diffKey: DifficultyKey, openin
     opening: OPENINGS[ok],
     t: 1 + w.rng(),
     attacksSent: 0,
-    attackSize: OPENINGS[ok].firstAttackSize,
+    attackSize: Math.max(2, Math.round(OPENINGS[ok].firstAttackSize * DIFFICULTY[diffKey].armyScale)),
     threatSince: -1,
     lastThreatAt: -99,
     fleeing: new Set(),
@@ -242,7 +242,7 @@ function playerTargets(w: World, bot: Bot): Entity[] {
 function attack(w: World, bot: Bot, tc: Entity): void {
   const army = w.units.filter((u) => !u.dead && u.team === bot.team && isSoldier(u) && !bot.defending.has(u.id));
   const idle = army.filter((u) => u.order.type === 'idle');
-  if (idle.length < bot.attackSize) return;
+  if (idle.length < bot.attackSize || w.time < bot.diff.firstAttackSec) return;
   const targets = playerTargets(w, bot);
   if (targets.length === 0) return;
   let goal: Entity;
@@ -253,9 +253,10 @@ function attack(w: World, bot: Bot, tc: Entity): void {
   } else {
     goal = targets.sort((a, b) => Math.hypot(a.x - tc.x, a.y - tc.y) - Math.hypot(b.x - tc.x, b.y - tc.y))[0];
   }
-  orderMove(w, idle, goal.x, goal.y, true);
+  // send the planned number; anything extra stays home to defend
+  orderMove(w, idle.slice(0, bot.attackSize), goal.x, goal.y, true);
   bot.attacksSent++;
-  bot.attackSize += bot.opening.attackGrow;
+  bot.attackSize += Math.max(1, Math.round(bot.opening.attackGrow * bot.diff.armyScale));
 }
 
 function defend(w: World, bot: Bot, tc: Entity): void {

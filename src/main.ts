@@ -1,38 +1,164 @@
-import { RENDER } from './config';
+import '@fontsource/press-start-2p/400.css';
+import './style.css';
+import { Audio } from './audio';
+import { DIFFICULTY, RENDER, type DifficultyKey } from './config';
+import { Game } from './game';
 import { integerScale } from './render/scale';
 
-// Project skeleton: sets up a crisp, integer-scaled canvas and a frame loop.
-// Milestone 1 (map, camera, selection) builds on this.
+const $ = <E extends HTMLElement>(id: string): E => document.getElementById(id) as E;
 
-const canvas = document.getElementById('game') as HTMLCanvasElement;
+const canvas = $<HTMLCanvasElement>('game');
 canvas.width = RENDER.width;
 canvas.height = RENDER.height;
 const ctx = canvas.getContext('2d')!;
 ctx.imageSmoothingEnabled = false;
 
+const audio = new Audio();
+const DIFF_KEY = 'pk-difficulty';
+let difficulty: DifficultyKey = 'normal';
+try {
+  const d = localStorage.getItem(DIFF_KEY) as DifficultyKey | null;
+  if (d && d in DIFFICULTY) difficulty = d;
+} catch {
+  /* ignore */
+}
+
 function fit(): void {
   const s = integerScale(window.innerWidth, window.innerHeight, RENDER.width, RENDER.height);
-  canvas.style.width = `${RENDER.width * s}px`;
-  canvas.style.height = `${RENDER.height * s}px`;
+  document.documentElement.style.setProperty('--s', String(s));
 }
 window.addEventListener('resize', fit);
 fit();
 
-function draw(): void {
-  const t = RENDER.tileSize;
-  for (let y = 0; y < RENDER.height / t; y++) {
-    for (let x = 0; x < RENDER.width / t; x++) {
-      ctx.fillStyle = (x + y) % 2 === 0 ? '#3b7d3a' : '#357236';
-      ctx.fillRect(x * t, y * t, t, t);
-    }
-  }
-  ctx.fillStyle = '#0d0d14';
-  ctx.fillRect(200, 160, 240, 40);
-  ctx.fillStyle = '#f4f1de';
-  ctx.font = '16px monospace';
-  ctx.textAlign = 'center';
-  ctx.textBaseline = 'middle';
-  ctx.fillText('Pixel Kingdoms', RENDER.width / 2, 180);
-  requestAnimationFrame(draw);
+let game: Game = new Game(canvas, audio, { difficulty: 'hard', seed: Math.floor(Math.random() * 1e9), attract: true });
+let screen: 'menu' | 'playing' | 'paused' | 'over' = 'menu';
+
+function show(id: string | null): void {
+  for (const s of ['menu', 'pause', 'over', 'help']) $(s).classList.toggle('hidden', s !== id);
 }
-requestAnimationFrame(draw);
+
+const DIFF_HINTS: Record<DifficultyKey, string> = {
+  easy: 'The enemy builds slowly and makes mistakes.',
+  normal: 'A fair fight.',
+  hard: 'The enemy builds fast and reacts at once.',
+};
+
+function renderMenu(): void {
+  for (const b of Array.from($('diff').querySelectorAll('button'))) b.classList.toggle('on', b.dataset.d === difficulty);
+  $('diff-hint').textContent = DIFF_HINTS[difficulty];
+  $('mute-btn').textContent = audio.muted ? 'Sound: off' : 'Sound: on';
+}
+
+function startGame(): void {
+  audio.unlock();
+  audio.play('click');
+  game.destroy();
+  game = new Game(canvas, audio, { difficulty, seed: Math.floor(Math.random() * 1e9) });
+  game.onPauseRequest = () => pause();
+  game.onGameOver = (won) => setTimeout(() => gameOver(won), 1200);
+  screen = 'playing';
+  show(null);
+  $('hud').classList.remove('hidden');
+}
+
+function toMenu(): void {
+  game.destroy();
+  game = new Game(canvas, audio, { difficulty: 'hard', seed: Math.floor(Math.random() * 1e9), attract: true });
+  screen = 'menu';
+  $('hud').classList.add('hidden');
+  show('menu');
+  renderMenu();
+}
+
+function pause(): void {
+  if (screen !== 'playing') return;
+  game.paused = true;
+  screen = 'paused';
+  show('pause');
+}
+
+function resume(): void {
+  game.paused = false;
+  screen = 'playing';
+  show(null);
+}
+
+function gameOver(won: boolean): void {
+  const r = game.results();
+  screen = 'over';
+  $('over-title').textContent = won ? 'Victory!' : 'Defeat';
+  $('over-sub').textContent = `${won ? 'You destroyed the enemy Town Center' : 'Your Town Center fell'} after ${r.time}. The enemy opened with: ${r.opening}.`;
+  $('over-stats').innerHTML = `<tr><th></th><th>You</th><th>Enemy</th></tr>${r.rows.map(([k, a, b]) => `<tr><td>${k}</td><td>${a}</td><td>${b}</td></tr>`).join('')}`;
+  show('over');
+}
+
+let helpReturn: string = 'menu';
+function openHelp(from: string): void {
+  helpReturn = from;
+  show('help');
+}
+
+$('diff').addEventListener('click', (e) => {
+  const b = (e.target as HTMLElement).closest('button');
+  if (!b?.dataset.d) return;
+  difficulty = b.dataset.d as DifficultyKey;
+  try {
+    localStorage.setItem(DIFF_KEY, difficulty);
+  } catch {
+    /* ignore */
+  }
+  audio.unlock();
+  audio.play('click');
+  renderMenu();
+});
+$('start').addEventListener('click', startGame);
+$('mute-btn').addEventListener('click', () => {
+  audio.unlock();
+  audio.toggleMute();
+  audio.play('click');
+  renderMenu();
+});
+$('help-btn').addEventListener('click', () => openHelp('menu'));
+$('help-btn2').addEventListener('click', () => openHelp('pause'));
+$('help-close').addEventListener('click', () => show(helpReturn));
+$('resume').addEventListener('click', resume);
+$('quit').addEventListener('click', toMenu);
+$('again').addEventListener('click', startGame);
+$('to-menu').addEventListener('click', toMenu);
+$('menu-btn').addEventListener('click', pause);
+window.addEventListener('keydown', (e) => {
+  if (e.key === 'Escape' && screen === 'playing') {
+    if (!game.cancelMode()) pause();
+  } else if (e.key === 'Escape' && screen === 'paused') {
+    if (!$('help').classList.contains('hidden')) show('pause');
+    else resume();
+  } else if (e.key === 'Escape' && screen === 'menu' && !$('help').classList.contains('hidden')) {
+    show('menu');
+  } else if (e.key === 'Enter' && screen === 'menu' && $('help').classList.contains('hidden')) startGame();
+});
+// keep buttons from holding keyboard focus (Space would click them again)
+document.addEventListener('mouseup', () => {
+  if (document.activeElement instanceof HTMLButtonElement) document.activeElement.blur();
+});
+
+if (matchMedia('(pointer: coarse)').matches && !matchMedia('(any-pointer: fine)').matches) $('touch-note').hidden = false;
+
+renderMenu();
+show('menu');
+
+let last = performance.now();
+function frame(now: number): void {
+  const dt = Math.min(0.25, (now - last) / 1000);
+  last = now;
+  game.update(dt);
+  if (screen === 'menu' && game.world.winner !== null) {
+    game.destroy();
+    game = new Game(canvas, audio, { difficulty: 'hard', seed: Math.floor(Math.random() * 1e9), attract: true });
+  }
+  game.render(ctx);
+  requestAnimationFrame(frame);
+}
+requestAnimationFrame(frame);
+
+// handy for debugging in the browser console
+(window as unknown as { pk: () => Game }).pk = () => game;
