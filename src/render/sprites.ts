@@ -1,4 +1,20 @@
 // Pixel sprites, drawn in code from a shared palette and cached as small canvases.
+// Two themes: Classic (drawn here) and Sakura Village (sakura.ts).
+
+import * as Sakura from './sakura';
+
+export type ThemeName = 'classic' | 'sakura';
+let theme: ThemeName = 'classic';
+export function setTheme(t: ThemeName): void {
+  theme = t;
+}
+export function getTheme(): ThemeName {
+  return theme;
+}
+/** Pixels a building sprite hangs below its footprint. */
+export function buildingPad(): number {
+  return theme === 'sakura' ? Sakura.BUILDING_PAD : 0;
+}
 
 export const PAL = {
   ink: '#1a1c2c',
@@ -236,6 +252,7 @@ function cavalry(px: Px, tc: TeamColors, pose: UnitPose, frame: number): void {
 }
 
 export function unitSprite(type: string, team: number, pose: UnitPose, frame: number, carry: string): HTMLCanvasElement {
+  if (theme === 'sakura') return Sakura.unitSprite(type, team, pose, frame, carry);
   const key = `u:${type}:${team}:${pose}:${frame}:${carry}`;
   const tc = TEAM[team] ?? TEAM[2];
   return make(key, 16, 16, (px) => {
@@ -247,6 +264,7 @@ export function unitSprite(type: string, team: number, pose: UnitPose, frame: nu
 }
 
 export function corpseSprite(type: string, team: number): HTMLCanvasElement {
+  if (theme === 'sakura') return Sakura.corpseSprite(type, team);
   const tc = TEAM[team] ?? TEAM[2];
   return make(`c:${type}:${team}`, 16, 16, (px) => {
     if (type === 'cavalry') {
@@ -265,6 +283,7 @@ export function corpseSprite(type: string, team: number): HTMLCanvasElement {
 // ---------- resources ----------
 
 export function treeSprite(variant: number): HTMLCanvasElement {
+  if (theme === 'sakura') return Sakura.treeSprite(variant);
   return make(`t:${variant}`, 16, 24, (px) => {
     px(3, 21, 11, 3, SHADOW);
     px(7, 15, 2, 7, PAL.trunk);
@@ -290,6 +309,7 @@ export function treeSprite(variant: number): HTMLCanvasElement {
 }
 
 export function berrySprite(level: number): HTMLCanvasElement {
+  if (theme === 'sakura') return Sakura.berrySprite(level);
   return make(`b:${level}`, 16, 16, (px) => {
     px(2, 13, 12, 2, SHADOW);
     disc(px, 8, 9.5, 6, PAL.leafDark);
@@ -448,6 +468,7 @@ function townCenter(px: Px, tc: TeamColors): void {
 }
 
 export function buildingSprite(type: string, team: number): HTMLCanvasElement {
+  if (theme === 'sakura') return Sakura.buildingSprite(type, team);
   const tc = TEAM[team] ?? TEAM[2];
   const size = type === 'townCenter' ? 48 : 32;
   return make(`bld:${type}:${team}`, size, size + 8, (px) => {

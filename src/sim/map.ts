@@ -51,6 +51,32 @@ export function createMatch(seed: number): Setup {
     }
   }
 
+  // the river: runs corner to corner between the villages, symmetric under the
+  // map's 180-degree mirror, with three bridges (center and two flanks)
+  const C = N / 2;
+  const riverAt = (x: number, y: number): { water: boolean; bridge: boolean; near: boolean } => {
+    const rx = x + 0.5 - C;
+    const ry = y + 0.5 - C;
+    const s = (rx - ry) / Math.SQRT2; // along the river
+    const d = (rx + ry) / Math.SQRT2; // across it
+    const off = d - 3.2 * Math.sin(s / 6.5);
+    const crossing = Math.abs(s) < 1.6 || Math.abs(Math.abs(s) - 17) < 1.6;
+    const inRiver = Math.abs(off) < 1.45;
+    return { water: inRiver && !crossing, bridge: inRiver && crossing, near: Math.abs(off) < 3.5 && (Math.abs(s) < 3.5 || Math.abs(Math.abs(s) - 17) < 3.5) };
+  };
+  for (let y = 0; y < N; y++) {
+    for (let x = 0; x < N; x++) {
+      const r = riverAt(x, y);
+      const i = y * N + x;
+      if (r.water) {
+        w.water[i] = 1;
+        w.blocked[i] = 3;
+      }
+      if (r.bridge) w.bridge[i] = 1;
+      if (r.water || r.bridge || r.near) forest[i] = 0;
+    }
+  }
+
   // keep the villages clear
   for (let y = 0; y < N; y++) {
     for (let x = 0; x < N; x++) {
@@ -70,6 +96,8 @@ export function createMatch(seed: number): Setup {
       }
     }
   }
+
+  for (let i = 0; i < N * N; i++) if (w.water[i] || w.bridge[i]) forest[i] = 0;
 
   // villages
   const playerTC = spawnBuilding(w, 'townCenter', PLAYER, PLAYER_TC.tx, PLAYER_TC.ty, true);

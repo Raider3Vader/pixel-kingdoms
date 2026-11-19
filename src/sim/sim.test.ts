@@ -181,3 +181,20 @@ describe('pathing', () => {
     expect(w.teams[PLAYER].wood).toBeGreaterThan(before);
   });
 });
+
+describe('river', () => {
+  it('crosses the map, is mirrored, and has bridges', () => {
+    const { world: w } = createMatch(8);
+    let water = 0;
+    let bridges = 0;
+    for (let y = 0; y < w.h; y++)
+      for (let x = 0; x < w.w; x++) {
+        const i = y * w.w + x;
+        water += w.water[i];
+        bridges += w.bridge[i];
+        expect(w.water[i]).toBe(w.water[(w.h - 1 - y) * w.w + (w.w - 1 - x)]);
+      }
+    expect(water).toBeGreaterThan(100);
+    expect(bridges).toBeGreaterThan(6);
+  });
+});

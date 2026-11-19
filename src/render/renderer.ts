@@ -6,9 +6,11 @@ import {
   PAL,
   TEAM,
   berrySprite,
+  buildingPad,
   buildingSprite,
   corpseSprite,
   foundationSprite,
+  getTheme,
   sheepSprite,
   treeSprite,
   unitSprite,
@@ -124,6 +126,48 @@ export function buildTerrain(w: World): HTMLCanvasElement {
       }
     }
   }
+  const sakura = getTheme() === 'sakura';
+  if (sakura) {
+    // fallen cherry petals
+    for (let ty = 0; ty < w.h; ty++)
+      for (let tx = 0; tx < w.w; tx++)
+        for (let i = 0; i < 3; i++) {
+          const a = hash(tx * 13 + i, ty * 29 - i * 5);
+          if (a < 0.22) px(tx * T + Math.floor(hash(tx + i * 7, ty) * 16), ty * T + Math.floor(hash(tx, ty + i * 11) * 16), 1, 1, a < 0.08 ? '#ffd6e3' : '#f4a7c0');
+        }
+  }
+  // river and bridges
+  const isW = (x: number, y: number): boolean => w.inBounds(x, y) && w.water[y * w.w + x] === 1;
+  const deep = sakura ? '#2f6f9a' : '#29559c';
+  const shallow = sakura ? '#4f97bf' : '#3f78c4';
+  const bank = sakura ? '#c9b07a' : '#a2875a';
+  for (let ty = 0; ty < w.h; ty++) {
+    for (let tx = 0; tx < w.w; tx++) {
+      const i = ty * w.w + tx;
+      if (w.water[i]) {
+        px(tx * T, ty * T, T, T, deep);
+        for (let k = 0; k < 4; k++) {
+          const a = hash(tx * 3 + k, ty * 5 - k);
+          px(tx * T + Math.floor(a * 12), ty * T + Math.floor(hash(tx - k, ty + k * 3) * 15), 3 + Math.floor(a * 3), 1, k % 2 ? shallow : '#8fc4e0');
+        }
+        // sandy banks where water meets land
+        if (!isW(tx, ty - 1)) px(tx * T, ty * T, T, 2, bank);
+        if (!isW(tx, ty + 1)) px(tx * T, ty * T + T - 2, T, 2, bank);
+        if (!isW(tx - 1, ty)) px(tx * T, ty * T, 2, T, bank);
+        if (!isW(tx + 1, ty)) px(tx * T + T - 2, ty * T, 2, T, bank);
+      } else if (w.bridge[i]) {
+        px(tx * T, ty * T, T, T, deep);
+        px(tx * T, ty * T + 1, T, T - 2, PAL.woodLight);
+        for (let k = 1; k < T; k += 3) px(tx * T, ty * T + k, T, 1, PAL.wood);
+        const rail = sakura ? '#d2452f' : PAL.trunk;
+        // rails only along edges that face the water
+        if (isW(tx, ty - 1)) px(tx * T, ty * T, T, 2, rail);
+        if (isW(tx, ty + 1)) px(tx * T, ty * T + T - 2, T, 2, rail);
+        if (isW(tx - 1, ty)) px(tx * T, ty * T, 2, T, rail);
+        if (isW(tx + 1, ty)) px(tx * T + T - 2, ty * T, 2, T, rail);
+      }
+    }
+  }
   // trodden earth around each Town Center
   for (const b of w.buildings) {
     if (b.type !== 'townCenter') continue;
@@ -185,7 +229,7 @@ export function drawWorld(ctx: CanvasRenderingContext2D, w: World, terrain: HTML
     if (!w.inBounds(ctx0, cty) || !visTile(ctx0, cty)) continue;
     ctx.globalAlpha = Math.min(1, (14 - c.t) / 4);
     const s = corpseSprite(c.type, c.team);
-    drawFlipped(ctx, s, c.x - 8, c.y - 13, c.facing < 0);
+    drawFlipped(ctx, s, Math.round(c.x) - Math.floor(s.width / 2), Math.round(c.y) - s.height + 3, c.facing < 0);
     ctx.globalAlpha = 1;
   }
 
@@ -199,8 +243,15 @@ export function drawWorld(ctx: CanvasRenderingContext2D, w: World, terrain: HTML
       items.push({
         y: e.y + 6,
         draw: () => {
-          if (e.type === 'tree') ctx.drawImage(treeSprite(e.id % 3), e.tx * T, e.ty * T - 8);
-          else if (e.type === 'berries') ctx.drawImage(berrySprite(Math.ceil((e.amount / e.startAmount) * 8)), e.tx * T, e.ty * T);
+          const sak = getTheme() === 'sakura';
+          if (e.type === 'tree') {
+            const v = sak ? treeVariant(e.id) : e.id % 3;
+            const s = treeSprite(v);
+            ctx.drawImage(s, Math.round(e.x - s.width / 2), (e.ty + 1) * T - s.height + (sak ? 3 : 0));
+          } else if (e.type === 'berries') {
+            const s = berrySprite(Math.ceil((e.amount / e.startAmount) * 8));
+            ctx.drawImage(s, Math.round(e.x - s.width / 2), (e.ty + 1) * T - s.height + (sak ? 3 : 0));
+          }
           else {
             const frame = Math.floor(t * 0.7 + e.id) % 3 === 0 ? 1 : 0;
             drawFlipped(ctx, sheepSprite(frame), e.tx * T, e.ty * T, e.id % 2 === 0);
@@ -219,13 +270,15 @@ export function drawWorld(ctx: CanvasRenderingContext2D, w: World, terrain: HTML
     items.push({
       y: (b.ty + b.size) * T,
       draw: () => {
-        const x = b.tx * T;
-        const y = b.ty * T - 8;
-        const sel = o.selected.has(b.id);
-        if (sel || o.hoverId === b.id) bracket(ctx, x - 1, b.ty * T - 1, b.size * T + 2, b.size * T + 2, b.team === PLAYER ? PAL.white : PAL.orange);
         const spr = buildingSprite(b.type, b.team);
+        const { x, y } = buildingPos(b, spr);
+        const sel = o.selected.has(b.id);
+        if (sel || o.hoverId === b.id) bracket(ctx, b.tx * T - 1, b.ty * T - 1, b.size * T + 2, b.size * T + 2, b.team === PLAYER ? PAL.white : PAL.orange);
+        // tall buildings turn see-through when a unit is behind them
+        const tall = spr.height > b.size * T + 12;
+        if (tall && b.progress >= 1 && w.units.some((u) => !u.dead && u.x > x && u.x < x + spr.width && u.y > y && u.y < b.ty * T && (!o.fog || u.team === PLAYER || vis[Math.floor(u.y / T) * w.w + Math.floor(u.x / T)] === 1))) ctx.globalAlpha = 0.6;
         if (b.progress < 1) {
-          ctx.drawImage(foundationSprite(b.size), x, y);
+          ctx.drawImage(foundationSprite(b.size), b.tx * T, b.ty * T - 8);
           const h = spr.height;
           const shown = Math.floor(h * b.progress);
           if (shown > 0) ctx.drawImage(spr, 0, h - shown, spr.width, shown, x, y + h - shown, spr.width, shown);
@@ -234,6 +287,7 @@ export function drawWorld(ctx: CanvasRenderingContext2D, w: World, terrain: HTML
           for (let px = x + 3; px < x + spr.width - 2; px += 9) ctx.fillRect(px, y + h - Math.max(10, shown) - 2, 1, Math.max(10, shown) + 2);
         } else {
           ctx.drawImage(spr, x, y);
+          ctx.globalAlpha = 1;
           if (b.hp < b.maxHp * 0.5) flames(ctx, b, t);
         }
       },
@@ -258,7 +312,8 @@ export function drawWorld(ctx: CanvasRenderingContext2D, w: World, terrain: HTML
         else if (pose === 'work') frame = Math.floor(u.animT * 3) % 2;
         else if (pose === 'attack') frame = u.cooldown > 0 && u.cooldown > (u.type === 'villager' ? 1.2 : 0.75) ? 1 : 0;
         const carry = u.type === 'villager' && u.carry >= 1 ? (u.carryKind ?? '') : '';
-        drawFlipped(ctx, unitSprite(u.type, u.team, pose, frame, carry), Math.round(u.x) - 8, Math.round(u.y) - 13, u.facing < 0);
+        const spr = unitSprite(u.type, u.team, pose, frame, carry);
+        drawFlipped(ctx, spr, Math.round(u.x) - Math.floor(spr.width / 2), Math.round(u.y) - spr.height + 3, u.facing < 0);
       },
     });
   }
@@ -335,7 +390,8 @@ export function drawWorld(ctx: CanvasRenderingContext2D, w: World, terrain: HTML
     const g = o.ghost;
     const s = BUILDINGS[g.type].size;
     ctx.globalAlpha = 0.6;
-    ctx.drawImage(buildingSprite(g.type, PLAYER), g.tx * T, g.ty * T - 8);
+    const gs = buildingSprite(g.type, PLAYER);
+    ctx.drawImage(gs, g.tx * T + Math.floor((s * T - gs.width) / 2), (g.ty + s) * T - gs.height + buildingPad());
     ctx.globalAlpha = 0.35;
     ctx.fillStyle = g.ok ? PAL.lime : PAL.red;
     ctx.fillRect(g.tx * T, g.ty * T, s * T, s * T);
@@ -354,6 +410,17 @@ export function drawWorld(ctx: CanvasRenderingContext2D, w: World, terrain: HTML
     }
   }
   ctx.setTransform(1, 0, 0, 1, 0, 0);
+}
+
+/** Where to draw a building sprite: centered on its footprint, bottom aligned. */
+export function buildingPos(b: Entity, spr: HTMLCanvasElement): { x: number; y: number } {
+  return { x: b.tx * T + Math.floor((b.size * T - spr.width) / 2), y: (b.ty + b.size) * T - spr.height + buildingPad() };
+}
+
+/** Sakura forests: about 35% cherry blossom, 40% pine, 25% bamboo. */
+function treeVariant(id: number): number {
+  const v = (id * 7919) % 20;
+  return v < 7 ? id % 2 : v < 15 ? 2 : 3;
 }
 
 function drawFlipped(ctx: CanvasRenderingContext2D, img: HTMLCanvasElement, x: number, y: number, flip: boolean): void {
@@ -428,6 +495,8 @@ export function drawMinimap(ctx: CanvasRenderingContext2D, w: World, cam: Camera
     d[i * 4 + 3] = 255;
   };
   for (let i = 0; i < w.w * w.h; i++) set(i, '#3e8948');
+  for (let i = 0; i < w.w * w.h; i++) if (w.water[i]) set(i, '#3f78c4');
+  else if (w.bridge[i]) set(i, '#c08a52');
   for (const r of w.resources) set(r.ty * w.w + r.tx, r.type === 'tree' ? '#1f5536' : r.type === 'berries' ? '#d63a4a' : '#ecebe4');
   for (const b of w.buildings) {
     if (fog && b.team !== PLAYER && !b.seen) continue;

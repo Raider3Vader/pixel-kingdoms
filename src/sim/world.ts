@@ -99,7 +99,9 @@ export type SimEvent =
 export class World {
   readonly w = MAP.widthTiles;
   readonly h = MAP.heightTiles;
-  blocked: Uint8Array; // 0 free, 1 resource, 2 building
+  blocked: Uint8Array; // 0 free, 1 resource, 2 building, 3 water
+  water: Uint8Array; // 1 = river
+  bridge: Uint8Array; // 1 = walkable crossing over the river
   occ: Int32Array; // entity id on the tile, or 0
   ents = new Map<number, Entity>();
   units: Entity[] = [];
@@ -118,6 +120,8 @@ export class World {
   constructor(seed = 1) {
     const n = this.w * this.h;
     this.blocked = new Uint8Array(n);
+    this.water = new Uint8Array(n);
+    this.bridge = new Uint8Array(n);
     this.occ = new Int32Array(n);
     this.vis = [new Uint8Array(n), new Uint8Array(n)];
     this.explored = [new Uint8Array(n), new Uint8Array(n)];

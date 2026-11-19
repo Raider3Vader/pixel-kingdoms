@@ -1,0 +1,553 @@
+// The Sakura Village theme: Japanese villagers and soldiers, cherry blossoms,
+// and three-quarter-view buildings with curved tile roofs. Drawn in code.
+
+type Px = (x: number, y: number, w: number, h: number, c: string) => void;
+type Team3 = { d: string; m: string; l: string };
+
+const JP = {
+  ol: '#2b1a24', plaster: '#f3eee2', plasterD: '#d8cfbd', wood: '#5b3a29', woodD: '#3a251b', woodL: '#8a5a3c', straw: '#d9b56a', strawD: '#a8843f',
+  shoji: '#f6f0dc', shojiL: '#c9bfa6', stone: '#9b9a96', stoneD: '#6d6c69', stoneL: '#c4c3be', skin: '#f2c9a2', hair: '#1f1a1d', vermil: '#d2452f', vermilD: '#93301f',
+  black: '#2a2a33', blackL: '#4a4a58', gold: '#e3b341', goldD: '#b8862a', pink: '#f4a7c0', pinkD: '#d9779a', pinkL: '#ffd6e3', leaf: '#3f7a43', leafD: '#2a5734',
+  bamboo: '#7fb05a', bambooD: '#4f7d38', persim: '#f07d2a', blade: '#d8dee6', horse: '#5a3a26', horseL: '#7a5238',
+};
+const SH = 'rgba(16,18,30,0.3)';
+const TEAMS: Team3[] = [
+  { d: '#24406e', m: '#3a62a8', l: '#79a0de' },
+  { d: '#6e2430', m: '#a83a44', l: '#de7984' },
+  { d: '#3a3a44', m: '#6a6a78', l: '#a0a0ae' },
+];
+interface RoofC {
+  hi: string;
+  l: string;
+  m: string;
+  d: string;
+  dd: string;
+}
+const ROOF: RoofC[] = [
+  { hi: '#a9c4ee', l: '#6f93d0', m: '#4a6cae', d: '#33508a', dd: '#22365f' },
+  { hi: '#f0b0b0', l: '#d0706f', m: '#ae4a4c', d: '#8a3337', dd: '#5f2226' },
+  { hi: '#c8c8d0', l: '#9a9aa6', m: '#74747f', d: '#55555f', dd: '#3a3a42' },
+];
+const RAFTER = '#3a2418';
+
+/** How far a building sprite's bottom hangs below its footprint (shadow rows). */
+export const BUILDING_PAD = 4;
+
+const cache = new Map<string, HTMLCanvasElement>();
+
+function make(key: string, w: number, h: number, fn: (px: Px) => void, outline = true): HTMLCanvasElement {
+  const hit = cache.get(key);
+  if (hit) return hit;
+  const c = document.createElement('canvas');
+  c.width = w;
+  c.height = h;
+  const ctx = c.getContext('2d')!;
+  fn((x, y, ww, hh, col) => {
+    ctx.fillStyle = col;
+    ctx.fillRect(x, y, ww, hh);
+  });
+  if (outline) {
+    const img = ctx.getImageData(0, 0, w, h);
+    const d = img.data;
+    const solid = (x: number, y: number): boolean => x >= 0 && y >= 0 && x < w && y < h && d[(y * w + x) * 4 + 3] > 150;
+    const marks: number[] = [];
+    for (let y = 0; y < h; y++)
+      for (let x = 0; x < w; x++) if (!solid(x, y) && (solid(x + 1, y) || solid(x - 1, y) || solid(x, y + 1) || solid(x, y - 1))) marks.push(y * w + x);
+    for (const i of marks) {
+      d[i * 4] = 0x2b;
+      d[i * 4 + 1] = 0x1a;
+      d[i * 4 + 2] = 0x24;
+      d[i * 4 + 3] = 255;
+    }
+    ctx.putImageData(img, 0, 0);
+  }
+  cache.set(key, c);
+  return c;
+}
+
+function disc(px: Px, cx: number, cy: number, r: number, c: string): void {
+  for (let y = Math.floor(cy - r); y <= Math.ceil(cy + r); y++)
+    for (let x = Math.floor(cx - r); x <= Math.ceil(cx + r); x++) {
+      const dx = x + 0.5 - cx;
+      const dy = y + 0.5 - cy;
+      if (dx * dx + dy * dy <= r * r) px(x, y, 1, 1, c);
+    }
+}
+
+// ---------- shared building parts ----------
+
+function shoji(px: Px, x: number, y: number, w: number, h: number): void {
+  px(x, y, w, h, JP.shoji);
+  for (let i = x; i < x + w; i += 3) px(i, y, 1, h, JP.shojiL);
+  for (let j = y; j < y + h; j += 3) px(x, j, w, 1, JP.shojiL);
+  px(x, y, w, 1, JP.wood);
+}
+function noren(px: Px, x: number, y: number, w: number, t: Team3): void {
+  px(x - 1, y - 1, w + 2, 1, JP.woodD);
+  px(x, y, w, 4, t.m);
+  for (let i = x + 2; i < x + w; i += 3) px(i, y + 1, 1, 3, t.d);
+  px(x + Math.floor(w / 2) - 1, y + 1, 2, 2, JP.plaster);
+}
+function nobori(px: Px, x: number, y: number, h: number, t: Team3): void {
+  px(x, y, 1, h, JP.woodD);
+  px(x + 1, y + 1, 4, 1, JP.woodD);
+  px(x + 1, y + 2, 4, h - 6, t.m);
+  px(x + 1, y + 2, 4, 1, t.l);
+  px(x + 2, y + 5, 2, 2, JP.plaster);
+  px(x + 2, y + 9, 2, 1, JP.plaster);
+}
+
+/** A curved tile roof seen from the front and a little above. */
+function roof3q(px: Px, cx: number, half: number, yTop: number, yEave: number, ridgeHalf: number, lift: number, c: RoofC, gable = false): void {
+  const step = (col: string): string => (col === c.hi ? c.l : col === c.l ? c.m : col === c.m ? c.d : c.dd);
+  for (let x = cx - half; x <= cx + half; x++) {
+    const t = (x - cx) / half;
+    const bottom = yEave - Math.round(lift * Math.pow(Math.abs(t), 3.2));
+    const ad = Math.abs(x - cx);
+    let top = yTop;
+    if (ad > ridgeHalf) top = yTop + Math.round(((ad - ridgeHalf) / Math.max(1, half - ridgeHalf)) * (yEave - yTop) * 0.8);
+    top = Math.min(top, bottom - 2);
+    const right = x > cx + half * 0.3;
+    for (let y = top; y <= bottom; y++) {
+      const k = (y - top) / Math.max(1, bottom - top);
+      let col = k < 0.18 ? c.hi : k < 0.45 ? c.l : k < 0.8 ? c.m : c.d;
+      if (right) col = step(col);
+      if ((x - cx + 300) % 3 === 0 && y > top) col = step(col);
+      px(x, y, 1, 1, col);
+    }
+    px(x, bottom, 1, 1, right ? c.d : c.l);
+    if (Math.abs(t) < 0.97) {
+      px(x, bottom + 1, 1, 1, RAFTER);
+      if ((x + 300) % 2 === 0) px(x, bottom + 2, 1, 1, RAFTER);
+      px(x, bottom + 2, 1, 2, 'rgba(20,10,20,0.28)');
+    }
+  }
+  px(cx - ridgeHalf - 1, yTop - 1, ridgeHalf * 2 + 3, 2, c.dd);
+  px(cx - ridgeHalf - 2, yTop - 3, 2, 3, c.dd);
+  px(cx + ridgeHalf + 1, yTop - 3, 2, 3, c.dd);
+  if (gable) {
+    for (let r = 0; r < 4; r++) px(cx - r - 1, yTop + 1 + r, r * 2 + 2, 1, r === 3 ? RAFTER : JP.woodL);
+    px(cx, yTop + 2, 1, 2, JP.gold);
+  }
+}
+function wall3q(px: Px, x: number, y: number, w: number, h: number, side: number, face: string, sideC: string): void {
+  px(x, y, w, h, face);
+  for (let i = 0; i < side; i++) px(x + w + i, y - Math.floor((i + 1) / 2), 1, h, sideC);
+}
+function base3q(px: Px, x: number, y: number, w: number, h: number, side: number): void {
+  px(x, y, w, 1, JP.stoneL);
+  px(x, y + 1, w, h - 1, JP.stone);
+  for (let r = y + 2; r < y + h; r += 2) for (let c = x + ((r - y) % 4 === 0 ? 1 : 4); c < x + w; c += 6) px(c, r, 2, 1, JP.stoneD);
+  for (let i = 0; i < side; i++) px(x + w + i, y - Math.floor((i + 1) / 2), 1, h, JP.stoneD);
+}
+
+// ---------- buildings ----------
+
+function house(px: Px, team: number): void {
+  const c = ROOF[team];
+  const t = TEAMS[team];
+  px(4, 45, 34, 4, SH);
+  base3q(px, 6, 42, 26, 4, 4);
+  px(5, 41, 28, 2, JP.woodL);
+  px(5, 42, 28, 1, JP.wood);
+  wall3q(px, 8, 28, 22, 13, 5, JP.plaster, JP.plasterD);
+  for (const x of [8, 18, 29]) px(x, 28, 1, 13, JP.wood);
+  for (let i = 0; i < 5; i++) px(30 + i, 28 - Math.floor((i + 1) / 2), 1, 1, JP.wood);
+  shoji(px, 10, 31, 7, 10);
+  noren(px, 10, 31, 7, t);
+  shoji(px, 20, 32, 8, 6);
+  roof3q(px, 20, 18, 13, 27, 6, 3, c, true);
+}
+function storehouse(px: Px, team: number): void {
+  const c = ROOF[team];
+  const t = TEAMS[team];
+  px(4, 45, 34, 4, SH);
+  base3q(px, 7, 42, 20, 4, 5);
+  wall3q(px, 8, 24, 18, 18, 6, JP.plaster, JP.plasterD);
+  px(8, 34, 18, 8, '#3b3b46');
+  for (let i = 0; i < 6; i++) px(26 + i, 34 - Math.floor((i + 1) / 2), 1, 8, '#2c2c35');
+  for (let x = 8; x < 26; x += 3)
+    for (const [dx, dy] of [
+      [1, 35],
+      [0, 36],
+      [2, 36],
+      [1, 37],
+      [1, 39],
+      [0, 40],
+      [2, 40],
+    ])
+      px(x + dx, dy, 1, 1, JP.plaster);
+  px(14, 27, 6, 5, '#2c2c35');
+  px(15, 28, 4, 3, JP.woodD);
+  px(13, 27, 1, 5, JP.plasterD);
+  px(20, 27, 1, 5, JP.plasterD);
+  noren(px, 14, 35, 6, t);
+  roof3q(px, 18, 15, 13, 23, 7, 2, c);
+  for (const [bx, by] of [
+    [30, 38],
+    [35, 38],
+    [32, 34],
+  ]) {
+    px(bx, by, 5, 5, JP.straw);
+    px(bx, by, 5, 1, '#f0d48c');
+    px(bx + 1, by, 1, 5, JP.strawD);
+    px(bx + 3, by, 1, 5, JP.strawD);
+  }
+}
+function dojo(px: Px, team: number): void {
+  const c = ROOF[team];
+  const t = TEAMS[team];
+  px(3, 45, 38, 4, SH);
+  base3q(px, 4, 41, 32, 5, 4);
+  px(16, 44, 10, 2, JP.stoneL);
+  wall3q(px, 6, 28, 28, 13, 5, JP.woodL, JP.wood);
+  for (let x = 6; x < 34; x += 4) px(x, 28, 1, 13, JP.wood);
+  for (let i = 0; i < 5; i++) px(34 + i, 28 - Math.floor((i + 1) / 2), 1, 13, JP.woodD);
+  shoji(px, 13, 31, 16, 10);
+  px(16, 29, 10, 3, JP.woodD);
+  px(17, 30, 8, 1, JP.plaster);
+  roof3q(px, 21, 21, 9, 27, 9, 4, c, true);
+  nobori(px, 1, 18, 26, t);
+  nobori(px, 38, 18, 26, t);
+}
+function pagoda(px: Px, team: number, H: number): void {
+  const c = ROOF[team];
+  const cx = 28;
+  const tiers = 3;
+  px(4, H - 6, 50, 4, SH);
+  base3q(px, 5, H - 14, 42, 9, 6);
+  px(18, H - 6, 12, 3, JP.stoneL);
+  px(19, H - 4, 10, 1, JP.stoneD);
+  let y = H - 14;
+  for (let i = 0; i < tiers; i++) {
+    const f = i / (tiers - 1);
+    const bw = Math.round(28 - f * 12);
+    const bh = i === 0 ? 11 : 6;
+    const bx = cx - Math.floor(bw / 2);
+    wall3q(px, bx, y - bh, bw, bh, 3, JP.plaster, JP.plasterD);
+    px(bx, y - bh, 2, bh, JP.vermil);
+    px(bx + bw - 2, y - bh, 2, bh, JP.vermil);
+    for (let k = 0; k < 3; k++) px(bx + bw + k, y - bh - Math.floor((k + 1) / 2), 1, bh, JP.vermilD);
+    if (i === 0) {
+      px(cx - 4, y - 9, 8, 9, JP.vermilD);
+      px(cx - 3, y - 8, 6, 8, '#4a2418');
+      px(cx - 1, y - 6, 2, 2, JP.gold);
+      px(bx + 3, y - 8, 3, 4, JP.shojiL);
+      px(bx + bw - 6, y - 8, 3, 4, JP.shojiL);
+    } else {
+      px(bx + 2, y - bh + 1, bw - 4, 1, JP.vermil);
+      for (let x = bx + 3; x < bx + bw - 3; x += 2) px(x, y - bh + 2, 1, 2, JP.vermilD);
+      px(cx - 1, y - bh + 2, 2, bh - 2, '#4a2418');
+    }
+    const half = Math.round(bw / 2 + 10 - f * 2);
+    const rh = i === 0 ? 8 : 6;
+    const eave = y - bh - 1;
+    roof3q(px, cx, half, eave - rh, eave, 2, i === 0 ? 3 : 2, c);
+    y = eave - rh + 2;
+  }
+  px(cx, y - 15, 1, 15, JP.gold);
+  for (let r = 0; r < 5; r++) px(cx - 1, y - 4 - r * 2, 3, 1, JP.goldD);
+  px(cx - 1, y - 17, 3, 2, JP.gold);
+  px(cx, y - 18, 1, 1, '#fff2b0');
+}
+
+export function buildingSprite(type: string, team: number): HTMLCanvasElement {
+  if (type === 'townCenter') return make(`tc:${team}`, 58, 86, (px) => pagoda(px, team, 86));
+  const w = type === 'barracks' ? 44 : 42;
+  return make(`b:${type}:${team}`, w, 50, (px) => {
+    if (type === 'house') house(px, team);
+    else if (type === 'storehouse') storehouse(px, team);
+    else dojo(px, team);
+  });
+}
+
+// ---------- people ----------
+
+export type Pose = 'idle' | 'walk' | 'attack' | 'work';
+
+function feet(px: Px, o: number, pose: Pose, frame: number): void {
+  if (pose === 'walk' && frame === 1) {
+    px(o + 5, 12, 2, 3, JP.black);
+    px(o + 9, 12, 2, 3, JP.black);
+    px(o + 4, 15, 2, 1, JP.straw);
+    px(o + 10, 15, 2, 1, JP.straw);
+  } else if (pose === 'walk') {
+    px(o + 7, 12, 2, 3, JP.black);
+    px(o + 7, 15, 3, 1, JP.straw);
+  } else {
+    px(o + 6, 12, 2, 3, JP.black);
+    px(o + 8, 12, 2, 3, JP.black);
+    px(o + 6, 15, 4, 1, JP.straw);
+  }
+}
+function flag(px: Px, o: number, t: Team3): void {
+  px(o + 3, 0, 1, 9, JP.woodD);
+  px(o + 0, 0, 3, 5, t.m);
+  px(o + 0, 0, 3, 1, t.l);
+  px(o + 1, 2, 1, 1, JP.plaster);
+}
+
+function villager(px: Px, t: Team3, pose: Pose, frame: number, carry: string): void {
+  const o = 1;
+  px(o + 3, 15, 10, 2, SH);
+  if (carry === 'wood') {
+    px(o + 1, 6, 1, 7, JP.woodD);
+    px(o + 1, 7, 3, 5, JP.woodL);
+    px(o + 1, 8, 3, 1, JP.straw);
+  } else if (carry === 'food') {
+    px(o + 1, 8, 4, 4, JP.straw);
+    px(o + 1, 7, 2, 2, JP.persim);
+    px(o + 3, 7, 2, 1, JP.persim);
+  }
+  feet(px, o, pose, frame);
+  px(o + 5, 7, 6, 5, t.m);
+  px(o + 5, 7, 1, 5, t.d);
+  px(o + 7, 7, 1, 1, JP.plaster);
+  px(o + 8, 8, 1, 1, JP.plaster);
+  px(o + 5, 10, 6, 1, JP.plaster);
+  px(o + 6, 3, 4, 4, JP.skin);
+  px(o + 9, 4, 1, 1, JP.ol);
+  px(o + 7, 0, 2, 1, JP.strawD);
+  px(o + 5, 1, 6, 1, JP.straw);
+  px(o + 3, 2, 10, 1, JP.straw);
+  px(o + 2, 3, 12, 1, JP.strawD);
+  if (pose === 'work' || pose === 'attack') {
+    if (frame === 0) {
+      px(o + 10, 4, 1, 3, JP.skin);
+      px(o + 11, 0, 1, 6, JP.woodL);
+      px(o + 11, 0, 3, 2, JP.blade);
+    } else {
+      px(o + 10, 7, 2, 2, JP.skin);
+      px(o + 11, 8, 4, 1, JP.woodL);
+      px(o + 14, 7, 2, 3, JP.blade);
+    }
+  } else px(o + 10, 8, 1, 3, JP.skin);
+}
+
+/** Samurai helmet (kabuto) with neck guard and a gold crescent crest. */
+function kabuto(px: Px, o: number, crest: boolean): void {
+  px(o + 6, 1, 4, 3, JP.black);
+  px(o + 7, 1, 2, 1, JP.blackL);
+  px(o + 4, 3, 2, 3, JP.black);
+  px(o + 5, 3, 1, 1, JP.blackL);
+  px(o + 10, 3, 1, 1, JP.black);
+  if (crest) {
+    px(o + 6, 0, 1, 1, JP.gold);
+    px(o + 9, 0, 1, 1, JP.gold);
+    px(o + 7, 1, 2, 1, JP.gold);
+  } else px(o + 8, 1, 1, 1, JP.gold);
+}
+/** Laced lamellar armor in team colors with shoulder plates. */
+function armor(px: Px, o: number, t: Team3): void {
+  px(o + 5, 7, 6, 4, t.d);
+  px(o + 5, 8, 6, 1, t.l);
+  px(o + 5, 10, 6, 1, t.m);
+  px(o + 5, 11, 6, 1, t.m);
+  px(o + 6, 11, 1, 1, t.d);
+  px(o + 9, 11, 1, 1, t.d);
+  px(o + 4, 7, 2, 3, t.m);
+  px(o + 4, 8, 2, 1, t.d);
+}
+
+function swordsman(px: Px, t: Team3, pose: Pose, frame: number): void {
+  const o = 1;
+  px(o + 3, 15, 10, 2, SH);
+  flag(px, o, t);
+  feet(px, o, pose, frame);
+  armor(px, o, t);
+  px(o + 6, 4, 4, 3, JP.skin);
+  px(o + 9, 4, 1, 1, JP.ol);
+  px(o + 7, 6, 3, 1, JP.black);
+  kabuto(px, o, true);
+  if (pose === 'attack' && frame === 1) {
+    px(o + 10, 8, 2, 2, JP.skin);
+    px(o + 12, 8, 5, 1, JP.blade);
+    px(o + 11, 7, 1, 3, JP.gold);
+  } else {
+    px(o + 10, 8, 2, 2, JP.skin);
+    px(o + 12, 1, 1, 7, JP.blade);
+    px(o + 11, 8, 3, 1, JP.gold);
+    px(o + 12, 9, 1, 2, JP.black);
+  }
+}
+
+function archer(px: Px, t: Team3, pose: Pose, frame: number): void {
+  const o = 1;
+  px(o + 3, 15, 10, 2, SH);
+  px(o + 2, 5, 2, 7, JP.woodL);
+  px(o + 2, 4, 1, 1, JP.plaster);
+  px(o + 3, 3, 1, 2, JP.plaster);
+  feet(px, o, pose, frame);
+  armor(px, o, t);
+  px(o + 6, 4, 4, 3, JP.skin);
+  px(o + 9, 4, 1, 1, JP.ol);
+  kabuto(px, o, false);
+  px(o + 10, 8, 2, 1, JP.skin);
+  // tall yumi bow
+  px(o + 13, 1, 1, 14, JP.woodL);
+  px(o + 12, 0, 1, 1, JP.woodL);
+  px(o + 12, 15, 1, 1, JP.woodL);
+  if (pose === 'attack' && frame === 1) {
+    for (const [x, y] of [
+      [12, 2],
+      [11, 4],
+      [10, 6],
+      [9, 8],
+      [10, 10],
+      [11, 12],
+      [12, 14],
+    ])
+      px(o + x, y, 1, 1, JP.plasterD);
+    px(o + 9, 8, 6, 1, JP.plaster);
+  } else px(o + 12, 1, 1, 14, JP.plasterD);
+}
+
+function cavalry(px: Px, t: Team3, pose: Pose, frame: number): void {
+  px(2, 15, 15, 2, SH);
+  // horse
+  const lc = JP.woodD;
+  if (pose === 'walk' && frame === 1) {
+    px(3, 13, 1, 3, lc);
+    px(6, 13, 1, 2, lc);
+    px(11, 13, 1, 2, lc);
+    px(14, 13, 1, 3, lc);
+  } else {
+    px(4, 13, 1, 3, lc);
+    px(6, 13, 1, 3, lc);
+    px(11, 13, 1, 3, lc);
+    px(13, 13, 1, 3, lc);
+  }
+  px(2, 9, 1, 5, JP.hair);
+  px(3, 9, 12, 4, JP.horse);
+  px(4, 12, 10, 1, JP.woodD);
+  px(12, 6, 3, 4, JP.horse);
+  px(13, 4, 4, 3, JP.horse);
+  px(16, 6, 1, 1, JP.ol);
+  px(14, 5, 1, 1, JP.ol);
+  px(13, 3, 1, 1, JP.horse);
+  px(12, 4, 1, 4, JP.hair);
+  px(5, 9, 6, 3, t.m);
+  px(5, 9, 6, 1, t.l);
+  // rider in armor with a crested helmet
+  flag(px, 3, t);
+  px(7, 4, 4, 5, t.d);
+  px(7, 5, 4, 1, t.m);
+  px(7, 7, 4, 1, t.m);
+  px(8, 2, 3, 2, JP.skin);
+  px(10, 2, 1, 1, JP.ol);
+  px(7, 1, 5, 1, JP.black);
+  px(8, 0, 3, 1, JP.black);
+  px(9, 0, 1, 1, JP.gold);
+  px(8, -1, 3, 1, JP.gold);
+  if (pose === 'attack' && frame === 1) {
+    px(9, 6, 9, 1, JP.woodL);
+    px(17, 5, 1, 3, JP.blade);
+  } else {
+    px(12, 0, 1, 10, JP.woodL);
+    px(12, 0, 1, 2, JP.blade);
+  }
+}
+
+export function unitSprite(type: string, team: number, pose: Pose, frame: number, carry: string): HTMLCanvasElement {
+  const t = TEAMS[team] ?? TEAMS[2];
+  if (type === 'cavalry') return make(`u:cav:${team}:${pose}:${frame}`, 20, 18, (px) => cavalry(px, t, pose, frame));
+  return make(`u:${type}:${team}:${pose}:${frame}:${carry}`, 18, 18, (px) => {
+    if (type === 'villager') villager(px, t, pose, frame, carry);
+    else if (type === 'swordsman') swordsman(px, t, pose, frame);
+    else archer(px, t, pose, frame);
+  });
+}
+
+export function corpseSprite(type: string, team: number): HTMLCanvasElement {
+  const t = TEAMS[team] ?? TEAMS[2];
+  return make(`c:${type}:${team}`, type === 'cavalry' ? 20 : 18, 18, (px) => {
+    if (type === 'cavalry') {
+      px(2, 12, 13, 3, JP.horse);
+      px(14, 12, 3, 2, JP.horse);
+      px(5, 10, 6, 2, t.d);
+    } else {
+      px(3, 13, 9, 3, type === 'villager' ? t.m : t.d);
+      px(12, 13, 3, 3, JP.skin);
+      if (type === 'villager') px(13, 11, 4, 1, JP.straw);
+    }
+  });
+}
+
+// ---------- nature ----------
+
+export function treeSprite(variant: number): HTMLCanvasElement {
+  // 0-1 cherry blossom, 2 pine, 3 bamboo
+  return make(`t:${variant}`, 20, 26, (px) => {
+    px(3, 23, 14, 3, SH);
+    if (variant <= 1) {
+      px(9, 15, 2, 9, JP.woodD);
+      px(7, 13, 2, 3, JP.woodD);
+      px(11, 12, 2, 3, JP.woodD);
+      disc(px, 10, 10, 8, JP.pinkD);
+      disc(px, variant ? 8.5 : 11, 8.5, 6, JP.pink);
+      disc(px, variant ? 7 : 9, 6.5, 2.6, JP.pinkL);
+      for (const [x, y] of [
+        [4, 12],
+        [15, 7],
+        [13, 13],
+        [6, 5],
+        [11, 3],
+      ])
+        px(x, y, 1, 1, '#ffffff');
+    } else if (variant === 2) {
+      px(9, 12, 2, 12, JP.woodD);
+      px(10, 10, 3, 2, JP.woodD);
+      px(6, 15, 3, 1, JP.woodD);
+      for (const [cx, cy, w] of [
+        [10, 4, 6],
+        [7, 9, 7],
+        [13, 13, 6],
+        [5, 16, 5],
+      ]) {
+        px(cx - w, cy, w * 2, 3, JP.leafD);
+        px(cx - w + 1, cy - 1, w * 2 - 2, 1, JP.leaf);
+        px(cx - w + 2, cy, w * 2 - 5, 1, JP.leaf);
+      }
+    } else {
+      for (const [x, top] of [
+        [5, 3],
+        [9, 0],
+        [13, 4],
+        [16, 8],
+      ]) {
+        px(x, top, 2, 24 - top, JP.bamboo);
+        for (let y = top + 4; y < 23; y += 5) px(x, y, 2, 1, JP.bambooD);
+        px(x + 2, top + 3, 3, 1, JP.leaf);
+        px(x - 3, top + 7, 3, 1, JP.leaf);
+      }
+    }
+  });
+}
+
+/** Persimmon tree: the food source that replaces berry bushes. */
+export function berrySprite(level: number): HTMLCanvasElement {
+  return make(`p:${level}`, 20, 22, (px) => {
+    px(3, 19, 14, 3, SH);
+    px(9, 13, 2, 7, JP.woodD);
+    disc(px, 10, 9, 7, JP.leafD);
+    disc(px, 9, 8, 5, JP.leaf);
+    const spots = [
+      [5, 9],
+      [12, 5],
+      [13, 11],
+      [8, 13],
+      [7, 4],
+      [10, 8],
+      [4, 6],
+      [14, 8],
+    ];
+    for (let i = 0; i < level; i++) {
+      const [x, y] = spots[i];
+      px(x, y, 2, 2, JP.persim);
+      px(x, y, 1, 1, '#ffb36b');
+    }
+  });
+}
+
+/** Petals and pebbles sprinkled over the grass. */
+export const GROUND_SPECKS = [JP.pink, JP.pinkL, JP.pinkD];

@@ -2,8 +2,8 @@
 
 import { Audio } from './audio';
 import { BUILDINGS, RENDER, SIM, UNITS, type BuildingType, type DifficultyKey, type UnitType, OPENINGS } from './config';
-import { buildTerrain, drawMinimap, drawWorld, Effects, type Camera, type Ghost } from './render/renderer';
-import { iconFor } from './render/sprites';
+import { buildingPos, buildTerrain, drawMinimap, drawWorld, Effects, type Camera, type Ghost } from './render/renderer';
+import { buildingSprite, iconFor } from './render/sprites';
 import { createBot, updateBot, type Bot } from './sim/bot';
 import { createMatch } from './sim/map';
 import {
@@ -460,7 +460,7 @@ export class Game {
       this.mouse.onCanvas = e.target === c;
       if (this.mouse.onCanvas) {
         const wp = this.toWorld(this.mouse.x, this.mouse.y);
-        const h = entityAt(this.world, wp.x, wp.y, (q) => visibleTo(this.world, PLAYER, q));
+        const h = this.pickAt(wp.x, wp.y);
         this.hoverId = h ? h.id : 0;
       } else this.hoverId = 0;
     });
@@ -637,7 +637,7 @@ export class Game {
 
   private clickSelect(p: { x: number; y: number }, shift: boolean): void {
     const wp = this.toWorld(p.x, p.y);
-    const e = entityAt(this.world, wp.x, wp.y, (q) => visibleTo(this.world, PLAYER, q));
+    const e = this.pickAt(wp.x, wp.y);
     if (!e) {
       if (!shift) this.select([], false);
       return;
@@ -656,6 +656,20 @@ export class Game {
       return;
     }
     this.select([e]);
+  }
+
+  /** What is under a world point, including the upper floors of tall buildings. */
+  private pickAt(x: number, y: number): Entity | null {
+    const w = this.world;
+    const e = entityAt(w, x, y, (q) => visibleTo(w, PLAYER, q));
+    if (e) return e;
+    for (const b of w.buildings) {
+      if (b.dead || !visibleTo(w, PLAYER, b)) continue;
+      const spr = buildingSprite(b.type, b.team);
+      const p = buildingPos(b, spr);
+      if (x >= p.x + 4 && x < p.x + spr.width - 4 && y >= p.y + 2 && y < (b.ty + b.size) * T) return b;
+    }
+    return null;
   }
 
   private boxSelect(a: { x: number; y: number }, b: { x: number; y: number }, shift: boolean): void {

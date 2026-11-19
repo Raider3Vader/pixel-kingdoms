@@ -4,6 +4,7 @@ import { Audio } from './audio';
 import { DIFFICULTY, RENDER, type DifficultyKey } from './config';
 import { Game } from './game';
 import { integerScale } from './render/scale';
+import { setTheme, type ThemeName } from './render/sprites';
 
 const $ = <E extends HTMLElement>(id: string): E => document.getElementById(id) as E;
 
@@ -22,6 +23,16 @@ try {
 } catch {
   /* ignore */
 }
+
+const THEME_KEY = 'pk-theme';
+let themeName: ThemeName = 'sakura';
+try {
+  const t = localStorage.getItem(THEME_KEY);
+  if (t === 'sakura' || t === 'classic') themeName = t;
+} catch {
+  /* ignore */
+}
+setTheme(themeName);
 
 function fit(): void {
   let s = integerScale(window.innerWidth, window.innerHeight, RENDER.width, RENDER.height);
@@ -48,6 +59,7 @@ const DIFF_HINTS: Record<DifficultyKey, string> = {
 
 function renderMenu(): void {
   for (const b of Array.from($('diff').querySelectorAll('button'))) b.classList.toggle('on', b.dataset.d === difficulty);
+  for (const b of Array.from($('theme').querySelectorAll('button'))) b.classList.toggle('on', b.dataset.t === themeName);
   $('diff-hint').textContent = DIFF_HINTS[difficulty];
   $('mute-btn').textContent = audio.muted ? 'Sound: off' : 'Sound: on';
 }
@@ -112,6 +124,23 @@ $('diff').addEventListener('click', (e) => {
   }
   audio.unlock();
   audio.play('click');
+  renderMenu();
+});
+$('theme').addEventListener('click', (e) => {
+  const b = (e.target as HTMLElement).closest('button');
+  if (!b?.dataset.t || b.dataset.t === themeName) return;
+  themeName = b.dataset.t as ThemeName;
+  setTheme(themeName);
+  try {
+    localStorage.setItem(THEME_KEY, themeName);
+  } catch {
+    /* ignore */
+  }
+  audio.unlock();
+  audio.play('click');
+  // rebuild the menu background in the new look
+  game.destroy();
+  game = new Game(canvas, audio, { difficulty: 'hard', seed: Math.floor(Math.random() * 1e9), attract: true });
   renderMenu();
 });
 $('start').addEventListener('click', startGame);
