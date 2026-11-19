@@ -180,7 +180,14 @@ export function createMatch(seed: number): Setup {
     const [mx, my] = [w.w * T - x, w.h * T - y];
     spawnUnit(w, 'villager', ENEMY, mx, my);
   }
-  for (const t of w.teams) t.popUsed = ECONOMY.startingVillagers;
+  // a scout on horseback, south of each Town Center
+  for (let i = 0; i < ECONOMY.startingScouts; i++) {
+    const x = (PLAYER_TC.tx + 1.5 + i) * T;
+    const y = (PLAYER_TC.ty + 3.6) * T;
+    spawnUnit(w, 'cavalry', PLAYER, x, y);
+    spawnUnit(w, 'cavalry', ENEMY, w.w * T - x, w.h * T - y);
+  }
+  for (const t of w.teams) t.popUsed = ECONOMY.startingVillagers + ECONOMY.startingScouts;
   w.teams[0].popCap = w.teams[1].popCap = 10;
   return { world: w, playerTC, enemyTC };
 }

@@ -11,6 +11,7 @@ import {
   orderAttack,
   orderGather,
   placeBuilding,
+  queueOrder,
   spawnBuilding,
   spawnResource,
   spawnUnit,
@@ -196,5 +197,37 @@ describe('river', () => {
       }
     expect(water).toBeGreaterThan(100);
     expect(bridges).toBeGreaterThan(6);
+  });
+});
+
+describe('order queue', () => {
+  it('finishes one resource, then moves on to the next queued one', () => {
+    const w = testWorld();
+    const tree = spawnResource(w, 'tree', 8, 3)!;
+    tree.amount = 15;
+    const sheep = spawnResource(w, 'sheep', 8, 7)!;
+    const v = spawnUnit(w, 'villager', PLAYER, 6 * T, 5 * T);
+    orderGather(w, [v], tree);
+    v.pending.push({ type: 'gather', target: sheep.id, resType: 'sheep', phase: 'go', dropId: 0 });
+    const wood0 = w.teams[PLAYER].wood;
+    const food0 = w.teams[PLAYER].food;
+    run(w, 80);
+    expect(tree.dead).toBe(true);
+    expect(w.teams[PLAYER].wood).toBe(wood0 + 15);
+    expect(w.teams[PLAYER].food).toBeGreaterThan(food0);
+    // it did not wander off to another tree
+    expect(v.order.type === 'gather' && v.order.resType === 'sheep').toBe(true);
+  });
+
+  it('walks a queue of waypoints in order', () => {
+    const w = testWorld();
+    const s = spawnUnit(w, 'cavalry', PLAYER, 20 * T, 20 * T);
+    queueOrder(w, [s], 26 * T, 20 * T, PLAYER, () => true);
+    queueOrder(w, [s], 26 * T, 26 * T, PLAYER, () => true);
+    queueOrder(w, [s], 20 * T, 26 * T, PLAYER, () => true);
+    expect(s.pending.length).toBe(2);
+    run(w, 20);
+    expect(s.pending.length).toBe(0);
+    expect(Math.hypot(s.x - 20 * T, s.y - 26 * T)).toBeLessThan(6);
   });
 });

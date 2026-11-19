@@ -31,6 +31,7 @@ export const ECONOMY = {
   startingFood: 100,
   startingWood: 50,
   startingVillagers: 3,
+  startingScouts: 1, // a cavalry rider for exploring
   maxPop: 100,
   maxQueue: 5,
 } as const;

@@ -62,6 +62,7 @@ export interface Entity {
   queueT: number;
   rally: Pt | null;
   rallyTarget: number;
+  pending: Order[]; // queued orders (Shift + right-click), done in turn
   seen: boolean; // has the player ever seen it
   housed: boolean;
   // resources
@@ -199,6 +200,7 @@ function blank(w: World, kind: Kind, type: string, team: number, x: number, y: n
     queueT: 0,
     rally: null,
     rallyTarget: 0,
+    pending: [],
     seen: false,
     housed: false,
     amount: 0,
@@ -452,6 +454,7 @@ export function orderBuild(w: World, units: Entity[], b: Entity): void {
 export function smartOrder(w: World, units: Entity[], x: number, y: number, team: number, canSee: (e: Entity) => boolean): 'move' | 'gather' | 'build' | 'attack' | 'none' {
   const mine = units.filter((u) => u.kind === 'unit' && u.team === team && !u.dead);
   if (mine.length === 0) return 'none';
+  for (const u of mine) u.pending.length = 0;
   const target = entityAt(w, x, y, (e) => canSee(e) && !(e.kind === 'unit' && e.team === team));
   if (target) {
     if (target.kind === 'resource') {
@@ -487,6 +490,40 @@ export function smartOrder(w: World, units: Entity[], x: number, y: number, team
   }
   orderMove(w, mine, x, y);
   return 'move';
+}
+
+export const MAX_QUEUE = 20;
+
+/** Shift + right-click: add an order to the end of each unit's queue. */
+export function queueOrder(w: World, units: Entity[], x: number, y: number, team: number, canSee: (e: Entity) => boolean): 'move' | 'gather' | 'build' | 'attack' | 'none' {
+  const mine = units.filter((u) => u.kind === 'unit' && u.team === team && !u.dead);
+  if (mine.length === 0) return 'none';
+  const target = entityAt(w, x, y, (e) => canSee(e) && !(e.kind === 'unit' && e.team === team));
+  let kind: 'move' | 'gather' | 'build' | 'attack' = 'move';
+  for (const u of mine) {
+    let o: Order = { type: 'move', x, y, attackMove: false };
+    if (target && target.kind === 'resource' && u.type === 'villager') {
+      o = { type: 'gather', target: target.id, resType: target.type as ResourceType, phase: 'go', dropId: 0 };
+      kind = 'gather';
+    } else if (target && target.team !== team && target.team !== NATURE) {
+      o = { type: 'attack', target: target.id, after: null };
+      kind = 'attack';
+    } else if (target && target.kind === 'building' && target.team === team && target.progress < 1 && u.type === 'villager') {
+      o = { type: 'build', target: target.id, after: null };
+      kind = 'build';
+    }
+    if (u.order.type === 'idle' && u.pending.length === 0) setOrder(u, o);
+    else if (u.pending.length < MAX_QUEUE) u.pending.push(o);
+  }
+  return kind;
+}
+
+/** Where an order points, for drawing queue flags. */
+export function orderPoint(w: World, o: Order): Pt | null {
+  if (o.type === 'move') return { x: o.x, y: o.y };
+  if (o.type === 'idle') return null;
+  const e = w.ents.get(o.target);
+  return e && !e.dead ? { x: e.x, y: e.y } : null;
 }
 
 // ---------- movement ----------
@@ -706,7 +743,12 @@ function attackStep(w: World, u: Entity, dt: number): void {
   const o = u.order as Extract<Order, { type: 'attack' }>;
   const tgt = w.get(o.target);
   if (!tgt) {
-    // target gone: look for another nearby, then go back to what we were doing
+    // target gone: with queued orders, move on to the next one
+    if (u.pending.length) {
+      setOrder(u, { type: 'idle' });
+      return;
+    }
+    // otherwise look for another nearby, then go back to what we were doing
     const next = u.type !== 'villager' ? findEnemyNear(w, u, UNITS[u.type as UnitType].sight * T) : null;
     if (next) setOrder(u, { type: 'attack', target: next.id, after: o.after });
     else setOrder(u, o.after ?? { type: 'idle' });
@@ -767,6 +809,11 @@ function gatherStep(w: World, u: Entity, dt: number): void {
       u.carry = 0;
       u.carryKind = null;
       let res = w.get(o.target);
+      if (!res && u.pending.length) {
+        // this resource is finished: on to the next queued task
+        setOrder(u, { type: 'idle' });
+        return;
+      }
       if (!res) res = findReplacement(u.x, u.y) ?? undefined;
       if (!res) {
         setOrder(u, { type: 'idle' });
@@ -781,6 +828,13 @@ function gatherStep(w: World, u: Entity, dt: number): void {
   }
 
   let res = w.get(o.target);
+  if (!res && u.pending.length) {
+    if (u.carry > 0) {
+      o.phase = 'drop';
+      o.dropId = 0;
+    } else setOrder(u, { type: 'idle' });
+    return;
+  }
   if (!res) {
     const rep = findReplacement(u.x, u.y);
     if (!rep) {
@@ -862,6 +916,10 @@ function buildStep(w: World, u: Entity, dt: number): void {
 }
 
 function finishBuildOrder(w: World, u: Entity, o: Extract<Order, { type: 'build' }>, b: Entity | undefined): void {
+  if (u.pending.length) {
+    setOrder(u, { type: 'idle' });
+    return;
+  }
   // help with another unfinished building close by
   const other = w.buildings.find((x) => !x.dead && x.team === u.team && x.progress < 1 && Math.hypot(x.x - u.x, x.y - u.y) < 5 * T);
   if (other) {
@@ -886,6 +944,7 @@ function updateUnit(w: World, u: Entity, dt: number): void {
   u.cooldown = Math.max(0, u.cooldown - dt);
   u.animT += dt;
   u.anim = 'idle';
+  if (u.order.type === 'idle' && u.pending.length) setOrder(u, u.pending.shift()!);
   const o = u.order;
   const soldier = u.type !== 'villager';
   const sight = UNITS[u.type as UnitType].sight * T;

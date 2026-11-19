@@ -19,6 +19,7 @@ import {
   isSoldier,
   orderMove,
   placeBuilding,
+  queueOrder,
   setOrder,
   smartOrder,
   step,
@@ -397,7 +398,10 @@ export class Game {
         enabled: true,
         tip: 'Stop and stand guard.',
         run: () => {
-          for (const s of soldiers) setOrder(s, { type: 'idle' });
+          for (const s of soldiers) {
+            s.pending.length = 0;
+            setOrder(s, { type: 'idle' });
+          }
           this.audio.play('command');
         },
       });
@@ -480,6 +484,7 @@ export class Game {
         }
         if (this.mode.kind === 'attackMove') {
           const units = this.mySel().filter((u) => u.kind === 'unit');
+          for (const u of units) u.pending.length = 0;
           orderMove(this.world, units, wp.x, wp.y, true);
           this.fx.marker(wp.x, wp.y, true);
           this.audio.play('command');
@@ -492,7 +497,7 @@ export class Game {
           this.mode = { kind: 'none' };
           return;
         }
-        this.rightClick(wp.x, wp.y);
+        this.rightClick(wp.x, wp.y, e.shiftKey);
       }
     });
     on(window, 'mouseup', (e) => {
@@ -538,7 +543,7 @@ export class Game {
       if (e.button === 0) {
         mmDrag = true;
         this.centerOn(p.x, p.y);
-      } else if (e.button === 2) this.rightClick(p.x, p.y);
+      } else if (e.button === 2) this.rightClick(p.x, p.y, e.shiftKey);
     });
     on(window, 'mousemove', (e) => {
       if (mmDrag) {
@@ -614,7 +619,7 @@ export class Game {
     }
   }
 
-  private rightClick(x: number, y: number): void {
+  private rightClick(x: number, y: number, queue = false): void {
     const w = this.world;
     const mine = this.mySel();
     if (mine.length === 0) return;
@@ -628,7 +633,7 @@ export class Game {
       this.audio.play('command');
       return;
     }
-    const r = smartOrder(w, mine, x, y, PLAYER, (e) => visibleTo(w, PLAYER, e));
+    const r = queue ? queueOrder(w, mine, x, y, PLAYER, (e) => visibleTo(w, PLAYER, e)) : smartOrder(w, mine, x, y, PLAYER, (e) => visibleTo(w, PLAYER, e));
     if (r !== 'none') {
       this.fx.marker(x, y, r === 'attack');
       this.audio.play('command');
@@ -731,7 +736,7 @@ export class Game {
       }
       return;
     }
-    if (k === '.') {
+    if (k === '.' || k === 'q') {
       this.nextIdleVillager();
       return;
     }
@@ -819,7 +824,7 @@ export class Game {
     info.innerHTML = '';
     const sel = this.selected;
     if (sel.length === 0) {
-      info.innerHTML = `<div class="dim">Left-click or drag to select.<br>Right-click to give orders.<br><br>H: Town Center &nbsp; .: idle villager</div>`;
+      info.innerHTML = `<div class="dim">Left-click or drag to select.<br>Right-click to give orders.<br><br>H: Town Center &nbsp; Q: idle villager<br>Shift+right-click: queue orders</div>`;
       return;
     }
     if (sel.length === 1) {

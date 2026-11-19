@@ -1,7 +1,7 @@
 // Draws the world: terrain, buildings, resources, units, effects and fog.
 
 import { BUILDINGS, RENDER, type BuildingType } from '../config';
-import { PLAYER, T, World, type Entity, type SimEvent } from '../sim/world';
+import { PLAYER, T, World, orderPoint, type Entity, type SimEvent } from '../sim/world';
 import {
   PAL,
   TEAM,
@@ -409,6 +409,30 @@ export function drawWorld(ctx: CanvasRenderingContext2D, w: World, terrain: HTML
       }
     }
   }
+  // queued orders of selected units (drawn over the fog so you can see where they go): a dotted trail with a flag at each stop
+  for (const u of w.units) {
+    if (u.dead || u.team !== PLAYER || u.pending.length === 0 || !o.selected.has(u.id)) continue;
+    const pts = [orderPoint(w, u.order), ...u.pending.map((q) => orderPoint(w, q))].filter((p): p is { x: number; y: number } => !!p);
+    let from = { x: u.x, y: u.y };
+    ctx.fillStyle = 'rgba(244,244,244,0.7)';
+    for (const p of pts) {
+      const d = Math.hypot(p.x - from.x, p.y - from.y);
+      for (let k = 4; k < d; k += 5) ctx.fillRect(Math.round(from.x + ((p.x - from.x) * k) / d), Math.round(from.y + ((p.y - from.y) * k) / d), 1, 1);
+      from = p;
+    }
+    pts.forEach((p, i) => {
+      const x = Math.round(p.x);
+      const y = Math.round(p.y);
+      ctx.fillStyle = PAL.trunk;
+      ctx.fillRect(x, y - 9, 1, 10);
+      ctx.fillStyle = i === 0 ? PAL.yellow : TEAM[PLAYER].light;
+      ctx.fillRect(x + 1, y - 9, 4, 3);
+      ctx.fillStyle = PAL.ink;
+      ctx.fillRect(x - 1, y, 3, 1);
+      ctx.fillStyle = 'rgba(244,244,244,0.7)';
+    });
+  }
+
   ctx.setTransform(1, 0, 0, 1, 0, 0);
 }
 
