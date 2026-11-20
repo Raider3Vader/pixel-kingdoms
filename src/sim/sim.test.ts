@@ -152,6 +152,21 @@ describe('combat', () => {
 });
 
 describe('economy extras', () => {
+  it('a rice paddy gives food, replants itself, and units walk over it', () => {
+    const w = testWorld();
+    const farm = spawnBuilding(w, 'farm', PLAYER, 8, 2, true);
+    expect(w.isBlocked(8, 2, PLAYER)).toBe(false);
+    farm.amount = 15;
+    const v = spawnUnit(w, 'villager', PLAYER, 10 * T, 4 * T);
+    setOrder(v, { type: 'gather', target: farm.id, resType: 'farm', phase: 'go', dropId: 0 });
+    const food0 = w.teams[PLAYER].food;
+    const wood0 = w.teams[PLAYER].wood;
+    run(w, 70);
+    expect(w.teams[PLAYER].food).toBeGreaterThan(food0 + 14);
+    expect(farm.dead).toBe(false);
+    expect(w.teams[PLAYER].wood).toBe(wood0 - 40); // replanted
+  });
+
   it('villagers mine gold and stone', () => {
     const w = testWorld();
     const g = spawnResource(w, 'gold', 9, 3)!;

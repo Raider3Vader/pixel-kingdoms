@@ -62,6 +62,7 @@ const $ = <E extends HTMLElement>(id: string): E => document.getElementById(id) 
 
 const TIPS: Record<string, string> = {
   house: '+5 population.',
+  farm: 'Renewable food: one villager works it for 300 food, then it replants itself for 40 wood. Units can walk over it.',
   storehouse: 'Drop-off for food and wood. Build it next to trees or berries to cut walking time.',
   barracks: 'Trains the sword and spear lines, and Archers from the Feudal Age.',
   stable: 'Trains Cavalry and Scouts.',
@@ -432,7 +433,7 @@ export class Game {
     const lockedTip = (age: number): string => `Needs the ${AGES[age].name}.`;
     if (vills.length) {
       const pages: BuildingType[][] = [
-        ['house', 'storehouse', 'barracks', 'stable', 'market'],
+        ['house', 'farm', 'storehouse', 'barracks', 'stable', 'market'],
         ['wall', 'gate', 'watchTower', 'stoneWall', 'stoneGate', 'guardTower'],
       ];
       pages[this.buildPage].forEach((b, i) => {
@@ -896,7 +897,7 @@ export class Game {
     if (mine.every((b) => b.kind === 'building')) {
       const trainers = mine.filter((b) => BUILDINGS[b.type as BuildingType].trains.length > 0);
       if (trainers.length === 0) return;
-      const t = entityAt(w, x, y, (e) => e.kind === 'resource' && visibleTo(w, PLAYER, e));
+      const t = entityAt(w, x, y, (e) => (e.kind === 'resource' || (e.type === 'farm' && e.team === PLAYER)) && visibleTo(w, PLAYER, e));
       for (const b of trainers) {
         b.rally = { x, y };
         b.rallyTarget = t ? t.id : 0;
@@ -1158,6 +1159,7 @@ export class Game {
       }
       if (s.garrison) info.insertAdjacentHTML('beforeend', `<div>${garrisoned(w, e).length}/${s.garrison} inside. Archers add arrows.</div>`);
       if (e.type === 'market') info.insertAdjacentHTML('beforeend', `<div class="dim">Trade: +${tradeIncome(w, PLAYER).toFixed(2)} gold/s. Merchants: ${w.teams[PLAYER].merchants}/${MARKET.maxMerchants}</div>`);
+      if (e.type === 'farm') info.insertAdjacentHTML('beforeend', `<div>${Math.ceil(e.amount)} food left. Replants for 40 wood.</div>`);
       if (s.gate) info.insertAdjacentHTML('beforeend', `<div class="dim">${e.locked ? 'Locked: nobody can pass.' : 'Open for your units only.'}</div>`);
       if (e.hp < e.maxHp) info.insertAdjacentHTML('beforeend', `<div class="dim">Right-click it with villagers to repair.</div>`);
       if (e.queue.length) {

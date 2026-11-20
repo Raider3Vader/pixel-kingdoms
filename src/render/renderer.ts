@@ -10,6 +10,7 @@ import {
   buildingSprite,
   corpseSprite,
   foundationSprite,
+  farmSprite,
   getTheme,
   mineSprite,
   sheepSprite,
@@ -223,6 +224,20 @@ export function drawWorld(ctx: CanvasRenderingContext2D, w: World, terrain: HTML
   const items: Drawable[] = [];
   const t = o.time;
 
+  // rice paddies are flat: drawn on the ground, under everything
+  for (const b of w.buildings) {
+    if (b.dead || b.type !== 'farm') continue;
+    if (b.tx + 2 < tx0 || b.tx > tx1 || b.ty + 2 < ty0 || b.ty > ty1) continue;
+    if (o.fog && b.team !== PLAYER && !b.seen) continue;
+    if (b.progress < 1) {
+      ctx.fillStyle = PAL.dirt;
+      ctx.fillRect(b.tx * T + 1, b.ty * T + 1, 30, 30);
+      ctx.fillStyle = '#4f7f9a';
+      ctx.fillRect(b.tx * T + 3, b.ty * T + 3, Math.round(26 * b.progress), 26);
+    } else ctx.drawImage(farmSprite(Math.ceil((b.amount / Math.max(1, b.startAmount)) * 4), b.team), b.tx * T, b.ty * T);
+    if (o.selected.has(b.id) || o.hoverId === b.id) bracket(ctx, b.tx * T - 1, b.ty * T - 1, 34, 34, b.team === PLAYER ? PAL.white : PAL.orange);
+  }
+
   // corpses lie under everything
   for (const c of fx.corpses) {
     const ctx0 = Math.floor(c.x / T);
@@ -268,7 +283,7 @@ export function drawWorld(ctx: CanvasRenderingContext2D, w: World, terrain: HTML
 
   // buildings
   for (const b of w.buildings) {
-    if (b.dead) continue;
+    if (b.dead || b.type === 'farm') continue;
     if (b.tx + b.size < tx0 || b.tx > tx1 || b.ty + b.size < ty0 || b.ty > ty1 + 1) continue;
     if (o.fog && b.team !== PLAYER && !b.seen) continue;
     items.push({

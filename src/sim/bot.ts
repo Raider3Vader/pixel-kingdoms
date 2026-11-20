@@ -25,6 +25,7 @@ import {
   startResearch,
   unitAvailable,
   distToEntity,
+  freeFarm,
   isSoldier,
   nearestDropoff,
   nearestResource,
@@ -51,6 +52,7 @@ export interface Bot {
   fleeing: Set<number>;
   defending: Set<number>;
   saving: boolean; // saving up to advance an age
+  savingSince: number;
 }
 
 export function createBot(w: World, team: number, diffKey: DifficultyKey, openingKey?: OpeningKey): Bot {
@@ -70,6 +72,7 @@ export function createBot(w: World, team: number, diffKey: DifficultyKey, openin
     fleeing: new Set(),
     defending: new Set(),
     saving: false,
+    savingSince: -1,
   };
 }
 
@@ -133,6 +136,14 @@ function tryBuild(w: World, bot: Bot, type: BuildingType, x: number, y: number, 
   return placeBuilding(w, bot.team, type, spot.tx, spot.ty, [b], false) === 'ok';
 }
 
+/** Plant a rice paddy near the Town Center (or a Storehouse) with this villager. */
+function tryFarm(w: World, bot: Bot, tc: Entity, v: Entity): boolean {
+  if (!canAfford(w, bot.team, BUILDINGS.farm.cost)) return false;
+  const spot = findBuildSpot(w, bot.team, 'farm', tc.x, tc.y, 3, 9);
+  if (!spot) return false;
+  return placeBuilding(w, bot.team, 'farm', spot.tx, spot.ty, [v], false) === 'ok';
+}
+
 function economy(w: World, bot: Bot, tc: Entity): void {
   const team = w.teams[bot.team];
   const vills = teamUnits(w, bot.team, 'villager');
@@ -161,13 +172,44 @@ function economy(w: World, bot: Bot, tc: Entity): void {
     const kinds: ResKind[] = ['food', 'wood', 'gold', 'stone'];
     kinds.sort((a, b) => have[a] - want[a] - (have[b] - want[b]));
     let res: Entity | null = null;
+    let building = false;
     for (const kind of kinds) {
-      res = nearestResource(w, v.x, v.y, (r) => RESOURCES[r.type as ResourceType].kind === kind, 40 * T);
+      if (kind === 'food') {
+        // wild food close to a drop-off first, then a free rice paddy, else plant one
+        const wild = nearestResource(w, v.x, v.y, (r) => RESOURCES[r.type as ResourceType].kind === 'food', 40 * T);
+        const drop = wild ? nearestDropoff(w, bot.team, wild.x, wild.y) : null;
+        if (wild && drop && distToEntity(wild.x, wild.y, drop) < 9 * T) res = wild;
+        else res = freeFarm(w, bot.team, v.x, v.y);
+        if (!res && tryFarm(w, bot, tc, v)) {
+          building = true;
+          break;
+        }
+        if (!res) res = wild;
+      } else res = nearestResource(w, v.x, v.y, (r) => RESOURCES[r.type as ResourceType].kind === kind, 40 * T);
       if (res) break;
     }
+    if (building) {
+      have.food++;
+      continue;
+    }
     if (!res) continue;
-    setOrder(v, { type: 'gather', target: res.id, resType: res.type as ResourceType, phase: 'go', dropId: 0 });
-    have[kindOf(res.type as ResourceType)]++;
+    const rt = res.kind === 'building' ? 'farm' : (res.type as ResourceType);
+    setOrder(v, { type: 'gather', target: res.id, resType: rt, phase: 'go', dropId: 0 });
+    have[kindOf(rt)]++;
+  }
+
+  // move one worker from a resource with too many to one with too few
+  {
+    const total = have.food + have.wood + have.gold + have.stone;
+    const want = share(total);
+    const ks: ResKind[] = ['food', 'wood', 'gold', 'stone'];
+    const over = ks.filter((k) => have[k] > want[k] + 1).sort((a, b) => have[b] - want[b] - (have[a] - want[a]))[0];
+    const under = ks.filter((k) => have[k] < want[k] - 1).sort((a, b) => have[a] - want[a] - (have[b] - want[b]))[0];
+    if (over && under) {
+      const v = vills.find((u) => u.order.type === 'gather' && kindOf(u.order.resType) === over && u.order.phase === 'work');
+      const res = v && under !== 'food' ? nearestResource(w, v.x, v.y, (r) => RESOURCES[r.type as ResourceType].kind === under, 40 * T) : v ? freeFarm(w, bot.team, v.x, v.y) : null;
+      if (v && res) setOrder(v, { type: 'gather', target: res.id, resType: res.kind === 'building' ? 'farm' : (res.type as ResourceType), phase: 'go', dropId: 0 });
+    }
   }
 
   // advance through the ages
@@ -177,7 +219,12 @@ function economy(w: World, bot: Bot, tc: Entity): void {
   if (nextAge <= 2 && vills.length >= ageAt && !w.buildings.some((b) => b.team === bot.team && b.research?.key === 'age')) {
     if (canAfford(w, bot.team, AGES[nextAge].cost)) {
       if (tc.queue.length === 0) startResearch(w, tc, 'age');
-    } else bot.saving = true; // hold back on the army to afford it
+      bot.savingSince = -1;
+    } else {
+      // hold back on the army to afford it, but never for more than two minutes
+      if (bot.savingSince < 0) bot.savingSince = w.time;
+      bot.saving = w.time - bot.savingSince < 120;
+    }
   }
 
   const unfinished = teamBuildings(w, bot.team).filter((b) => b.progress < 1);

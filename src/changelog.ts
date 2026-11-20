@@ -9,6 +9,16 @@ export interface ChangelogEntry {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    version: '0.7.2',
+    date: '2026-11-20',
+    title: 'Rice paddies',
+    items: [
+      'New building: the Rice paddy (60 wood). A villager works it for 300 food, then it replants itself for 40 wood. Units can walk over it.',
+      'Food no longer runs out once the wild food near your village is gone.',
+      'The enemy plants paddies, moves workers between resources as it needs them, and no longer stalls its army while saving up for an age.',
+    ],
+  },
+  {
     version: '0.7.1',
     date: '2026-11-20',
     title: 'Choke points',

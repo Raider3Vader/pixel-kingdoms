@@ -419,6 +419,28 @@ function guardTower(px: Px, team: number): void {
   nobori(px, 0, 24, 20, t);
 }
 
+/** Rice paddy (2x2 tiles, drawn flat on the ground); `level` 0-4 is how much rice is left. */
+export function farmSprite(level: number, team: number): HTMLCanvasElement {
+  return make(`farm:${level}:${team}`, 32, 32, (px) => {
+    px(0, 0, 32, 32, '#6b4a2e'); // earth banks
+    px(1, 1, 30, 30, '#4f7f9a'); // shallow water
+    px(1, 1, 30, 1, '#3a6680');
+    px(15, 1, 2, 30, '#6b4a2e'); // the raised path between plots
+    px(1, 15, 30, 2, '#6b4a2e');
+    for (let y = 3; y < 30; y += 4)
+      for (let x = 3; x < 30; x += 3) {
+        if (x === 15 || x === 16 || y === 15) continue;
+        const ripe = level <= 1 ? '#c9b25a' : '#5aa34a';
+        if ((x + y) % 7 < level + 2) {
+          px(x, y, 1, 2, ripe);
+          px(x + 1, y - 1, 1, 1, level >= 3 ? '#7fc45a' : ripe);
+        }
+      }
+    px(28, 2, 2, 2, TEAMS[team].m); // a little team marker post
+    px(29, 4, 1, 3, JP.woodD);
+  }, false);
+}
+
 /** Gold mine or stone quarry; `level` 1-4 shrinks as it is mined out. */
 export function mineSprite(kind: string, level: number): HTMLCanvasElement {
   return make(`mine:${kind}:${level}`, 20, 18, (px) => {

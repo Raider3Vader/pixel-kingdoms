@@ -167,7 +167,7 @@ button:focus-visible {
 #cmds {
   padding: calc(3px * var(--s));
   display: flex;
-  gap: calc(4px * var(--s));
+  gap: calc(2px * var(--s));
   align-items: flex-start;
 }
 #minimap {
@@ -180,7 +180,7 @@ button:focus-visible {
 
 .cmd {
   position: relative;
-  width: calc(56px * var(--s));
+  width: calc(46px * var(--s));
   height: calc(47px * var(--s));
   padding: calc(1px * var(--s));
   display: flex;

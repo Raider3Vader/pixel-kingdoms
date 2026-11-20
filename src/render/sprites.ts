@@ -549,6 +549,10 @@ export function foundationSprite(size: number): HTMLCanvasElement {
   });
 }
 
+export function farmSprite(level: number, team: number): HTMLCanvasElement {
+  return Sakura.farmSprite(level, team);
+}
+
 export function mineSprite(kind: string, level: number): HTMLCanvasElement {
   return Sakura.mineSprite(kind, level);
 }
@@ -556,6 +560,7 @@ export function mineSprite(kind: string, level: number): HTMLCanvasElement {
 /** A 16 x 16 icon for the HUD. */
 export function iconFor(type: string, team = 0, tier = 0): HTMLCanvasElement {
   if (type === 'gold' || type === 'stone') return mineSprite(type, 4);
+  if (type === 'farm') return farmSprite(4, team);
   if (type.startsWith('age-') || type.startsWith('buy-') || type === 'merchant' || type.startsWith('gate-')) {
     return make(`icon:${type}`, 16, 16, (px) => {
       if (type === 'age-feudal' || type === 'age-imperial') {

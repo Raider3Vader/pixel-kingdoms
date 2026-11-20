@@ -9,6 +9,7 @@ export type BuildingType =
   | 'townCenter'
   | 'storehouse'
   | 'house'
+  | 'farm'
   | 'barracks'
   | 'stable'
   | 'market'
@@ -18,7 +19,7 @@ export type BuildingType =
   | 'stoneGate'
   | 'watchTower'
   | 'guardTower';
-export type ResourceType = 'berries' | 'sheep' | 'tree' | 'gold' | 'stone';
+export type ResourceType = 'berries' | 'sheep' | 'tree' | 'gold' | 'stone' | 'farm';
 
 /** 0 = Dark Age, 1 = Feudal Age, 2 = Imperial Age. */
 export type Age = 0 | 1 | 2;
@@ -68,7 +69,11 @@ export const RESOURCES: Record<ResourceType, { name: string; kind: ResKind; gath
   tree: { name: 'Tree', kind: 'wood', gatherPerSec: 0.6, amount: 100 },
   gold: { name: 'Gold mine', kind: 'gold', gatherPerSec: 0.45, amount: 400 },
   stone: { name: 'Stone quarry', kind: 'stone', gatherPerSec: 0.45, amount: 350 },
+  farm: { name: 'Rice paddy', kind: 'food', gatherPerSec: 0.5, amount: 300 },
 };
+
+/** Rice paddies replant themselves for this much when they run dry. */
+export const FARM = { reseed: { wood: 40 } as Cost };
 
 export interface BuildingStats {
   name: string;
@@ -85,6 +90,7 @@ export interface BuildingStats {
   attackSec: number;
   rangeTiles: number;
   garrison: number; // troops it can hold
+  walkable?: boolean; // units walk over it (rice paddies)
   wall?: boolean; // one-tile wall piece
   gate?: boolean; // lets its own side through unless locked
 }
@@ -106,6 +112,7 @@ export const BUILDINGS: Record<BuildingType, BuildingStats> = {
   townCenter: B({ name: 'Town Center', cost: {}, buildSec: 0, size: 3, hp: 600, sight: 8, pop: 10, dropoff: true, trains: ['villager'], attack: 4, attackSec: 1.5, rangeTiles: 6 }),
   storehouse: B({ name: 'Storehouse', cost: { wood: 60 }, buildSec: 20, size: 2, hp: 200, sight: 5, dropoff: true }),
   house: B({ name: 'House', cost: { wood: 30 }, buildSec: 15, size: 2, hp: 150, pop: 5 }),
+  farm: B({ name: 'Rice paddy', cost: { wood: 60 }, buildSec: 12, size: 2, hp: 100, sight: 2, walkable: true }),
   barracks: B({ name: 'Barracks', cost: { wood: 150 }, buildSec: 40, size: 2, hp: 350, sight: 5, trains: ['swordsman', 'spearman', 'archer'] }),
   stable: B({ name: 'Stable', cost: { wood: 125 }, age: 1, buildSec: 35, size: 2, hp: 300, sight: 5, trains: ['cavalry', 'scout'] }),
   market: B({ name: 'Market', cost: { wood: 175 }, age: 1, buildSec: 45, size: 2, hp: 300, sight: 5 }),

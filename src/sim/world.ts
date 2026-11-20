@@ -5,6 +5,7 @@ import {
   BUILDINGS,
   CLOSE_QUARTERS,
   ECONOMY,
+  FARM,
   MAP,
   MARKET,
   REPAIR,
@@ -284,11 +285,13 @@ export function spawnBuilding(w: World, type: BuildingType, team: number, tx: nu
   for (let y = ty; y < ty + s.size; y++) {
     for (let x = tx; x < tx + s.size; x++) {
       const i = y * w.w + x;
-      w.blocked[i] = 2;
+      if (!s.walkable) w.blocked[i] = 2;
       w.occ[i] = e.id;
     }
   }
   if (finished) applyGate(w, e);
+  if (type === 'farm' && finished) e.amount = e.startAmount = RESOURCES.farm.amount;
+  if (s.walkable) return e;
   // push units out of the footprint
   for (const u of w.units) {
     const utx = Math.floor(u.x / T);
@@ -332,6 +335,22 @@ export function nearestDropoff(w: World, team: number, x: number, y: number): En
   for (const b of w.buildings) {
     if (b.dead || b.team !== team || b.progress < 1 || !BUILDINGS[b.type as BuildingType].dropoff) continue;
     const d = distToEntity(x, y, b);
+    if (d < bd) {
+      bd = d;
+      best = b;
+    }
+  }
+  return best;
+}
+
+/** The nearest finished rice paddy of a team that nobody is working. */
+export function freeFarm(w: World, team: number, x: number, y: number, maxDist = Infinity): Entity | null {
+  let best: Entity | null = null;
+  let bd = maxDist;
+  for (const b of w.buildings) {
+    if (b.dead || b.team !== team || b.type !== 'farm' || b.progress < 1) continue;
+    if (w.units.some((u) => !u.dead && u.order.type === 'gather' && u.order.target === b.id)) continue;
+    const d = Math.hypot(b.x - x, b.y - y);
     if (d < bd) {
       bd = d;
       best = b;
@@ -411,7 +430,7 @@ export function canPlace(w: World, team: number, type: BuildingType, tx: number,
   for (let y = ty; y < ty + s.size; y++) {
     for (let x = tx; x < tx + s.size; x++) {
       if (x < 1 || y < 1 || x >= w.w - 1 || y >= w.h - 1) return 'blocked';
-      if (w.blocked[y * w.w + x]) return 'blocked';
+      if (w.blocked[y * w.w + x] || w.occ[y * w.w + x]) return 'blocked';
       if (requireExplored && team < 2 && !w.explored[team][y * w.w + x]) return 'unexplored';
     }
   }
@@ -721,6 +740,10 @@ export function smartOrder(w: World, units: Entity[], x: number, y: number, team
       if (target.progress < 1 && vills.length) {
         orderBuild(w, vills, target);
         return 'build';
+      }
+      if (target.type === 'farm' && vills.length) {
+        for (const v of vills) setOrder(v, { type: 'gather', target: target.id, resType: 'farm', phase: 'go', dropId: 0 });
+        return 'gather';
       }
       const soldiersHere = mine.filter((u) => u.type !== 'villager');
       if (BUILDINGS[target.type as BuildingType].garrison > 0 && target.progress >= 1 && soldiersHere.length) {
@@ -1071,7 +1094,9 @@ function gatherStep(w: World, u: Entity, dt: number): void {
   const kind = RESOURCES[o.resType].kind;
 
   const findReplacement = (fromX: number, fromY: number): Entity | null =>
-    nearestResource(w, fromX, fromY, (r) => r.type === o.resType, 10 * T) ?? nearestResource(w, fromX, fromY, (r) => RESOURCES[r.type as ResourceType].kind === kind, 10 * T);
+    o.resType === 'farm'
+      ? freeFarm(w, u.team, fromX, fromY, 10 * T)
+      : nearestResource(w, fromX, fromY, (r) => r.type === o.resType, 10 * T) ?? nearestResource(w, fromX, fromY, (r) => RESOURCES[r.type as ResourceType].kind === kind, 10 * T);
 
   if (o.phase === 'drop') {
     let drop = w.get(o.dropId);
@@ -1171,7 +1196,13 @@ function gatherStep(w: World, u: Entity, dt: number): void {
   const take = Math.min(rate, res.amount, cap - u.carry);
   u.carry += take;
   res.amount -= take;
-  if (res.amount <= 1e-6) kill(w, res);
+  if (res.amount <= 1e-6) {
+    if (res.type === 'farm' && canAfford(w, res.team, FARM.reseed)) {
+      // a rice paddy replants itself
+      pay(w, res.team, FARM.reseed);
+      res.amount = res.startAmount;
+    } else kill(w, res);
+  }
   if (u.carry >= cap - 1e-6 || res.dead) {
     o.phase = 'drop';
     o.dropId = 0;
@@ -1200,6 +1231,7 @@ function buildStep(w: World, u: Entity, dt: number): void {
     b.hp = Math.min(b.maxHp, b.hp + b.maxHp * dp * 0.9);
     if (b.progress >= 1) {
       applyGate(w, b);
+      if (b.type === 'farm') b.amount = b.startAmount = RESOURCES.farm.amount;
       w.emit({ t: 'built', id: b.id, team: b.team, type: b.type, x: b.x, y: b.y });
       finishBuildOrder(w, u, o, b);
     }
@@ -1209,6 +1241,10 @@ function buildStep(w: World, u: Entity, dt: number): void {
 function finishBuildOrder(w: World, u: Entity, o: Extract<Order, { type: 'build' }>, b: Entity | undefined): void {
   if (u.pending.length) {
     setOrder(u, { type: 'idle' });
+    return;
+  }
+  if (b && b.type === 'farm' && b.progress >= 1) {
+    setOrder(u, { type: 'gather', target: b.id, resType: 'farm', phase: 'go', dropId: 0 });
     return;
   }
   // help with another unfinished building close by
@@ -1484,7 +1520,8 @@ function updateBuilding(w: World, b: Entity, dt: number): void {
         team.stats.trained++;
         w.emit({ t: 'trained', id: u.id, team: b.team, type, x: u.x, y: u.y });
         const rt = b.rallyTarget ? w.get(b.rallyTarget) : undefined;
-        if (rt && rt.kind === 'resource' && type === 'villager') orderGather(w, [u], rt);
+        if (rt && type === 'villager' && rt.type === 'farm') setOrder(u, { type: 'gather', target: rt.id, resType: 'farm', phase: 'go', dropId: 0 });
+        else if (rt && rt.kind === 'resource' && type === 'villager') orderGather(w, [u], rt);
         else if (b.rally) orderMove(w, [u], b.rally.x, b.rally.y);
       }
     }
