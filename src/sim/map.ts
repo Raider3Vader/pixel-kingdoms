@@ -16,7 +16,29 @@ function mirror(w: World, x: number, y: number): [number, number] {
   return [w.w - 1 - x, w.h - 1 - y];
 }
 
-export function createMatch(seed: number): Setup {
+export type RiverKind = 'winding' | 'meandering' | 'twin' | 'lake' | 'fords';
+
+interface RiverLayout {
+  name: string;
+  streams: number[]; // offsets of each stream from the map's middle diagonal (symmetric)
+  amp: number; // how far it swings
+  freq: number; // how long each swing is
+  width: number; // half-width in tiles
+  crossings: number[]; // where bridges or fords are, along the river (symmetric)
+  crossWidth: number;
+  fords: boolean; // crossings are shallow water instead of bridges
+  lake: number; // radius of a lake in the middle, 0 = none
+}
+
+export const RIVERS: Record<RiverKind, RiverLayout> = {
+  winding: { name: 'Winding river', streams: [0], amp: 4.5, freq: 9.5, width: 1.5, crossings: [0, -26, 26], crossWidth: 1.6, fords: false, lake: 0 },
+  meandering: { name: 'Meandering river', streams: [0], amp: 7, freq: 10, width: 1.4, crossings: [-14, 14, -32, 32], crossWidth: 1.6, fords: false, lake: 0 },
+  twin: { name: 'Twin streams', streams: [-11, 11], amp: 3, freq: 8, width: 1, crossings: [0, -24, 24], crossWidth: 1.6, fords: false, lake: 0 },
+  lake: { name: 'Central lake', streams: [0], amp: 3, freq: 10, width: 1.5, crossings: [-19, 19, -35, 35], crossWidth: 1.6, fords: false, lake: 8 },
+  fords: { name: 'Wide river with fords', streams: [0], amp: 3, freq: 12, width: 2.6, crossings: [0, -18, 18, -36, 36], crossWidth: 2.2, fords: true, lake: 0 },
+};
+
+export function createMatch(seed: number, opts: { river?: RiverKind } = {}): Setup {
   const w = new World(seed);
   const N = w.w;
   const forest = new Uint8Array(N * N);
@@ -88,18 +110,29 @@ export function createMatch(seed: number): Setup {
     }
   }
 
-  // the river: runs corner to corner between the villages, symmetric under the
-  // map's 180-degree mirror, with three bridges (center and two flanks)
+  // the river: runs corner to corner between the villages. Each match picks a layout.
+  // Every layout is symmetric under the map's 180-degree mirror, so both sides are equal.
   const C = N / 2;
-  const riverAt = (x: number, y: number): { water: boolean; bridge: boolean; near: boolean; off: number; s: number } => {
+  const kinds = Object.keys(RIVERS) as RiverKind[];
+  const kind: RiverKind = opts.river ?? kinds[Math.floor(rand() * kinds.length)];
+  const R = RIVERS[kind];
+  w.river = kind;
+  const riverAt = (x: number, y: number): { water: boolean; bridge: boolean; ford: boolean; near: boolean; off: number; s: number } => {
     const rx = x + 0.5 - C;
     const ry = y + 0.5 - C;
     const s = (rx - ry) / Math.SQRT2; // along the river
     const d = (rx + ry) / Math.SQRT2; // across it
-    const off = d - 4.5 * Math.sin(s / 9.5);
-    const crossing = Math.abs(s) < 1.6 || Math.abs(Math.abs(s) - 26) < 1.6;
-    const inRiver = Math.abs(off) < 1.5;
-    return { water: inRiver && !crossing, bridge: inRiver && crossing, near: Math.abs(off) < 3.5 && (Math.abs(s) < 3.5 || Math.abs(Math.abs(s) - 26) < 3.5), off, s };
+    let off = Infinity; // distance to the nearest stream's middle
+    for (const o of R.streams) {
+      const v = d - o - R.amp * Math.sin(s / R.freq);
+      if (Math.abs(v) < Math.abs(off)) off = v;
+    }
+    const lake = R.lake > 0 && Math.hypot(rx, ry) < R.lake + Math.sin(Math.atan2(ry, rx) * 2) * 0.9 + Math.cos(Math.atan2(ry, rx) * 4) * 0.5;
+    if (lake) off = 0;
+    const crossing = !lake && R.crossings.some((c) => Math.abs(s - c) < R.crossWidth);
+    const inRiver = Math.abs(off) < R.width || lake;
+    const near = !lake && Math.abs(off) < R.width + 2 && R.crossings.some((c) => Math.abs(s - c) < R.crossWidth + 2);
+    return { water: inRiver && !crossing, bridge: inRiver && crossing && !R.fords, ford: inRiver && crossing && R.fords, near, off, s };
   };
   for (let y = 0; y < N; y++) {
     for (let x = 0; x < N; x++) {
@@ -110,16 +143,17 @@ export function createMatch(seed: number): Setup {
         w.blocked[i] = 3;
       }
       if (r.bridge) w.bridge[i] = 1;
-      if (r.water || r.bridge || r.near) forest[i] = 0;
+      if (r.ford) w.bridge[i] = 2; // shallow, walkable water
+      if (r.water || r.bridge || r.ford || r.near) forest[i] = 0;
     }
   }
   // trees along the river banks, and small groves where it enters and leaves the map
   for (let y = 0; y < N; y++) {
     for (let x = 0; x < N; x++) {
       const r = riverAt(x, y);
-      if (r.water || r.bridge || r.near) continue;
+      if (r.water || r.bridge || r.ford || r.near) continue;
       const bank = Math.abs(r.off);
-      if (bank < 1.6) continue;
+      if (bank < R.width + 0.2) continue;
       if (bank < 4.5 && rand() < 0.16) setF(x, y);
       else if (Math.abs(r.s) > 44 && bank < 8 && rand() < 0.45) setF(x, y);
     }

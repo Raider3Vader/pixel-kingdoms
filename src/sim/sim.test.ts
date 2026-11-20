@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { AGES, BUILDINGS, ECONOMY, SIM, UNITS, hitDamage, type Age, type UnitType } from '../config';
 import { createBot, updateBot } from './bot';
-import { createMatch } from './map';
+import { RIVERS, createMatch, type RiverKind } from './map';
 import { findPath } from './path';
 import {
   ENEMY,
@@ -299,6 +299,26 @@ describe('pathing', () => {
     run(w, 60);
     expect(w.teams[PLAYER].wood).toBeGreaterThan(before);
   });
+});
+
+describe('river layouts', () => {
+  for (const kind of Object.keys(RIVERS) as RiverKind[]) {
+    it(`${RIVERS[kind].name}: mirrored, and the villages connect`, () => {
+      for (const seed of [1, 7]) {
+        const { world: w, playerTC, enemyTC } = createMatch(seed, { river: kind });
+        let water = 0;
+        for (let y = 0; y < w.h; y++)
+          for (let x = 0; x < w.w; x++) {
+            const i = y * w.w + x;
+            water += w.water[i];
+            expect(w.water[i]).toBe(w.water[(w.h - 1 - y) * w.w + (w.w - 1 - x)]);
+          }
+        expect(water).toBeGreaterThan(100);
+        const p = findPath(w, playerTC.tx + 3, playerTC.ty + 3, (x, y) => x === enemyTC.tx - 1 && y === enemyTC.ty - 1, enemyTC.tx - 1, enemyTC.ty - 1);
+        expect(p).not.toBeNull();
+      }
+    });
+  }
 });
 
 describe('river', () => {

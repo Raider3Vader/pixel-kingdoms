@@ -139,7 +139,7 @@ export function buildTerrain(w: World): HTMLCanvasElement {
         }
   }
   // river and bridges
-  const isW = (x: number, y: number): boolean => w.inBounds(x, y) && w.water[y * w.w + x] === 1;
+  const isW = (x: number, y: number): boolean => w.inBounds(x, y) && (w.water[y * w.w + x] === 1 || w.bridge[y * w.w + x] === 2);
   const deep = sakura ? '#2f6f9a' : '#29559c';
   const shallow = sakura ? '#4f97bf' : '#3f78c4';
   const bank = sakura ? '#c9b07a' : '#a2875a';
@@ -157,6 +157,16 @@ export function buildTerrain(w: World): HTMLCanvasElement {
         if (!isW(tx, ty + 1)) px(tx * T, ty * T + T - 2, T, 2, bank);
         if (!isW(tx - 1, ty)) px(tx * T, ty * T, 2, T, bank);
         if (!isW(tx + 1, ty)) px(tx * T + T - 2, ty * T, 2, T, bank);
+      } else if (w.bridge[i] === 2) {
+        // ford: shallow water with stepping stones, walkable
+        px(tx * T, ty * T, T, T, shallow);
+        for (let k = 0; k < 3; k++) {
+          const a = hash(tx * 5 + k, ty * 7 - k);
+          px(tx * T + 2 + Math.floor(a * 10), ty * T + 2 + Math.floor(hash(tx - k, ty + k) * 11), 4, 3, PAL.stone);
+          px(tx * T + 2 + Math.floor(a * 10), ty * T + 2 + Math.floor(hash(tx - k, ty + k) * 11), 4, 1, PAL.silver);
+        }
+        if (!isW(tx, ty - 1) && !w.bridge[(ty - 1) * w.w + tx]) px(tx * T, ty * T, T, 2, bank);
+        if (!isW(tx, ty + 1) && !w.bridge[(ty + 1) * w.w + tx]) px(tx * T, ty * T + T - 2, T, 2, bank);
       } else if (w.bridge[i]) {
         px(tx * T, ty * T, T, T, deep);
         px(tx * T, ty * T + 1, T, T - 2, PAL.woodLight);
@@ -555,6 +565,7 @@ export function drawMinimap(ctx: CanvasRenderingContext2D, w: World, cam: Camera
   };
   for (let i = 0; i < w.w * w.h; i++) set(i, '#3e8948');
   for (let i = 0; i < w.w * w.h; i++) if (w.water[i]) set(i, '#3f78c4');
+  else if (w.bridge[i] === 2) set(i, '#7fb2d6');
   else if (w.bridge[i]) set(i, '#c08a52');
   for (const r of w.resources) set(r.ty * w.w + r.tx, r.type === 'tree' ? '#1f5536' : r.type === 'berries' ? '#d63a4a' : r.type === 'gold' ? '#ffcd75' : r.type === 'stone' ? '#94b0c2' : '#ecebe4');
   for (const b of w.buildings) {

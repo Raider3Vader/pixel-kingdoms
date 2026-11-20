@@ -4,7 +4,7 @@ import { deflateSync } from 'node:zlib';
 import { createMatch } from '../src/sim/map';
 const [out, ...seeds] = process.argv.slice(2);
 const S = 5;
-const maps = seeds.map((s) => createMatch(Number(s)).world);
+const maps = seeds.map((s) => (s.includes(':') ? createMatch(Number(s.split(':')[0]), { river: s.split(':')[1] as never }) : createMatch(Number(s))).world);
 const N = maps[0].w;
 const W = maps.length * N * S + (maps.length - 1) * 12;
 const H = N * S;
@@ -15,7 +15,7 @@ maps.forEach((w, m) => {
     for (let x = 0; x < N; x++) {
       const i = y * N + x;
       const e = w.occ[i] ? w.ents.get(w.occ[i]) : undefined;
-      const c = w.water[i] ? col.water : w.bridge[i] ? col.bridge : e?.kind === 'building' ? (e.team === 0 ? col.tc : col.etc) : e?.type === 'tree' ? col.tree : e?.type === 'gold' ? col.gold : e?.type === 'stone' ? col.stone : e ? col.food : col.open;
+      const c = w.water[i] ? col.water : w.bridge[i] === 2 ? [127, 178, 214] as [number, number, number] : w.bridge[i] ? col.bridge : e?.kind === 'building' ? (e.team === 0 ? col.tc : col.etc) : e?.type === 'tree' ? col.tree : e?.type === 'gold' ? col.gold : e?.type === 'stone' ? col.stone : e ? col.food : col.open;
       for (let dy = 0; dy < S; dy++)
         for (let dx = 0; dx < S; dx++) {
           const o = ((y * S + dy) * W + m * (N * S + 12) + x * S + dx) * 3;

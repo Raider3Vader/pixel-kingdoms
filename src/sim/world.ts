@@ -131,7 +131,8 @@ export class World {
   readonly h = MAP.heightTiles;
   blocked: Uint8Array; // 0 free, 1 resource, 2 building, 3 water
   water: Uint8Array; // 1 = river
-  bridge: Uint8Array; // 1 = walkable crossing over the river
+  bridge: Uint8Array; // 1 = bridge, 2 = shallow ford: walkable crossings over the river
+  river = 'winding'; // which river layout this map has
   occ: Int32Array; // entity id on the tile, or 0
   ents = new Map<number, Entity>();
   units: Entity[] = [];

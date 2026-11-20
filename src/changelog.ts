@@ -9,6 +9,15 @@ export interface ChangelogEntry {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    version: '0.7.3',
+    date: '2026-11-20',
+    title: 'River variants',
+    items: [
+      'Each match picks one of five river layouts: winding, meandering (no bridge in the middle), twin streams with land between them, a central lake to go around, or a wide river with shallow fords instead of bridges.',
+      'Fords are walkable shallow water with stepping stones.',
+    ],
+  },
+  {
     version: '0.7.2',
     date: '2026-11-20',
     title: 'Rice paddies',
