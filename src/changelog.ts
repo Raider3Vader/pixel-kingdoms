@@ -9,6 +9,16 @@ export interface ChangelogEntry {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    version: '0.7.1',
+    date: '2026-11-20',
+    title: 'Choke points',
+    items: [
+      'A thick forest belt now crosses each half of the map, between your village and the middle, with two or three narrow gaps: choke points to hold or wall off.',
+      'A few dense woods with no way through, and open meadows in between.',
+      'Villagers can still chop a new path through any forest.',
+    ],
+  },
+  {
     version: '0.7',
     date: '2026-11-20',
     title: 'Ages, gold and stone, walls and towers',

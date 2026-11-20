@@ -32,8 +32,45 @@ export function createMatch(seed: number): Setup {
   for (let y = 0; y <= 15; y++) for (let x = 19; x <= 29; x++) if (rand() < 0.66 - Math.max(0, (x - 25) * 0.12)) setF(x, y);
   for (let y = 19; y <= 29; y++) for (let x = 0; x <= 15; x++) if (rand() < 0.64 - Math.max(0, (y - 25) * 0.12)) setF(x, y);
 
-  // random woods across the map, loosely packed
-  for (let i = 0; i < 18; i++) {
+  // a thick forest belt across each half, between the village and the middle,
+  // with two or three narrow gaps: the choke points into each village's land
+  const beltAt = 34 + Math.floor(rand() * 6); // tiles along the diagonal from the corner
+  const gapCount = 2 + (rand() < 0.5 ? 1 : 0);
+  const gaps: number[] = [];
+  for (let g = 0; g < gapCount; g++) gaps.push(-26 + (52 / (gapCount - 1)) * g + (rand() - 0.5) * 8);
+  for (let y = 0; y < N; y++) {
+    for (let x = 0; x < N; x++) {
+      const along = x - y; // position along the belt
+      const wobble = Math.sin(along / 5.5 + beltAt) * 2.2;
+      const depth = x + y - beltAt - wobble; // across the belt
+      const thick = 4 + Math.sin(along / 3.1) * 0.8;
+      if (Math.abs(depth) > thick) continue;
+      if (gaps.some((g) => Math.abs(along - g) < 1.6)) continue; // a 3-tile gap
+      if (rand() < 0.97 || Math.abs(depth) < thick - 1.5) setF(x, y);
+    }
+  }
+
+  // a few dense woods with no paths through them
+  for (let i = 0; i < 3; i++) {
+    for (let tries = 0; tries < 40; tries++) {
+      const cx = 6 + rand() * (N - 12);
+      const cy = 6 + rand() * (N - 12);
+      if (cx + cy > N - 8) continue;
+      if (Math.hypot(cx - tcC.x, cy - tcC.y) < 22 || Math.hypot(cx - enemyC.x, cy - enemyC.y) < 22) continue;
+      const r = 3.5 + rand() * 2.5;
+      for (let y = Math.floor(cy - r - 2); y <= cy + r + 2; y++) {
+        for (let x = Math.floor(cx - r - 2); x <= cx + r + 2; x++) {
+          const a = Math.atan2(y - cy, x - cx);
+          const edge = r + Math.sin(a * 3 + i) * 1.2 + Math.cos(a * 5) * 0.6;
+          if (Math.hypot(x - cx, y - cy) < edge) setF(x, y);
+        }
+      }
+      break;
+    }
+  }
+
+  // and some light, scattered woods; the rest stays open meadow
+  for (let i = 0; i < 10; i++) {
     for (let tries = 0; tries < 30; tries++) {
       const cx = 4 + rand() * (N - 8);
       const cy = 4 + rand() * (N - 8);
