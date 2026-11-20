@@ -281,7 +281,175 @@ function stable(px: Px, team: number): void {
   px(0, 40, 5, 1, JP.strawD);
 }
 
-export function buildingSprite(type: string, team: number): HTMLCanvasElement {
+function market(px: Px, team: number): void {
+  const c = ROOF[team];
+  const t = TEAMS[team];
+  px(4, 45, 36, 4, SH);
+  base3q(px, 5, 42, 30, 4, 4);
+  wall3q(px, 7, 26, 28, 16, 5, JP.woodL, JP.wood);
+  for (let i = 0; i < 5; i++) px(35 + i, 26 - Math.floor((i + 1) / 2), 1, 16, JP.woodD);
+  // open shop front with a counter of goods
+  px(9, 30, 24, 12, '#3a2418');
+  px(8, 36, 26, 6, JP.woodD);
+  px(8, 36, 26, 1, JP.woodL);
+  px(10, 32, 4, 4, JP.straw);
+  px(10, 33, 4, 1, JP.strawD);
+  disc(px, 17, 34, 2, '#8a5a3c');
+  px(16, 32, 2, 1, '#c98d52');
+  px(21, 32, 3, 4, JP.pinkD);
+  px(24, 32, 3, 4, '#3a62a8');
+  px(27, 33, 4, 3, JP.persim);
+  px(28, 33, 1, 1, '#ffb36b');
+  noren(px, 12, 27, 18, t);
+  // red paper lanterns
+  for (const lx of [7, 33]) {
+    px(lx, 28, 3, 4, JP.vermil);
+    px(lx, 29, 3, 1, JP.vermilD);
+    px(lx + 1, 27, 1, 1, JP.woodD);
+  }
+  roof3q(px, 21, 20, 12, 25, 8, 3, c, true);
+}
+
+/** Wall piece joined to its neighbours (mask bits: 1 north, 2 east, 4 south, 8 west). */
+function wallPiece(px: Px, mask: number, stone: boolean, team: number): void {
+  const g = 18; // ground line inside the tile
+  const t = TEAMS[team];
+  const run = (x0: number, x1: number, dy: number): void => {
+    if (stone) {
+      px(x0, g - 11 + dy, x1 - x0, 2, JP.black);
+      px(x0, g - 12 + dy, x1 - x0, 1, JP.blackL);
+      px(x0, g - 9 + dy, x1 - x0, 7, JP.plaster);
+      px(x0, g - 3 + dy, x1 - x0, 5, JP.stone);
+      for (let x = x0 + 1; x < x1; x += 4) px(x, g - 1 + dy, 2, 1, JP.stoneD);
+      px(x0, g + 2 + dy, x1 - x0, 1, JP.stoneD);
+    } else {
+      for (let x = x0; x < x1; x += 2) {
+        const h = 12 + ((x * 7) % 3);
+        px(x, g - h + dy, 2, h + 2, JP.woodL);
+        px(x + 1, g - h + 1 + dy, 1, h + 1, JP.wood);
+        px(x, g - h - 1 + dy, 1, 1, JP.woodL);
+      }
+      px(x0, g - 6 + dy, x1 - x0, 1, JP.strawD);
+    }
+  };
+  px(2, g + 1, 12, 3, SH);
+  if (mask & 1) run(4, 12, -6);
+  if (mask & 8) run(0, 8, 0);
+  run(4, 12, 0);
+  if (mask & 2) run(8, 16, 0);
+  if (mask & 4) run(4, 12, 6);
+  if (stone && mask === 0) px(6, g - 7, 4, 2, t.m); // a lone pillar gets a team badge
+}
+
+/** Gate (variant bits: 1 open, 2 runs north-south, 4 locked). */
+function gatePiece(px: Px, variant: number, stone: boolean, team: number): void {
+  const t = TEAMS[team];
+  const open = (variant & 1) !== 0;
+  const locked = (variant & 4) !== 0;
+  px(1, 27, 14, 3, SH);
+  const post = stone ? JP.stone : JP.woodD;
+  px(0, 10, 3, 18, post);
+  px(13, 10, 3, 18, post);
+  if (stone) {
+    px(0, 10, 3, 1, JP.stoneL);
+    px(13, 10, 3, 1, JP.stoneL);
+    roof3q(px, 8, 9, 4, 9, 4, 1, ROOF[team]);
+  } else {
+    px(-1, 7, 18, 2, JP.vermil);
+    px(0, 9, 16, 1, JP.vermilD);
+    px(1, 11, 14, 1, JP.woodD);
+  }
+  if (open) {
+    px(3, 12, 10, 16, '#241710');
+    px(3, 12, 2, 16, JP.woodL);
+    px(11, 12, 2, 16, JP.woodL);
+  } else {
+    px(3, 12, 10, 16, stone ? JP.woodD : JP.woodL);
+    for (let x = 4; x < 13; x += 3) px(x, 12, 1, 16, stone ? '#2e1d14' : JP.wood);
+    px(7, 12, 2, 16, JP.ol);
+    px(4, 14, 3, 4, t.m);
+    px(9, 14, 3, 4, t.m);
+    if (stone) for (const [x, y] of [[4, 20], [10, 20], [4, 25], [10, 25]]) px(x, y, 1, 1, JP.blade);
+  }
+  if (locked) {
+    px(3, 19, 10, 2, JP.blackL);
+    px(7, 18, 2, 4, JP.gold);
+  }
+}
+
+function watchTower(px: Px, team: number): void {
+  const c = ROOF[team];
+  const t = TEAMS[team];
+  px(2, 41, 20, 4, SH);
+  for (const lx of [4, 18]) px(lx, 18, 2, 26, JP.woodD);
+  for (const lx of [8, 14]) px(lx, 20, 1, 24, JP.wood);
+  for (let i = 0; i < 12; i++) {
+    px(5 + i, 22 + Math.floor(i * 1.5), 1, 1, JP.wood);
+    px(17 - i, 22 + Math.floor(i * 1.5), 1, 1, JP.wood);
+  }
+  px(10, 22, 1, 22, JP.woodL);
+  px(13, 22, 1, 22, JP.woodL);
+  for (let y = 24; y < 44; y += 3) px(10, y, 4, 1, JP.woodL);
+  px(2, 17, 20, 3, JP.woodL);
+  px(2, 19, 20, 1, JP.woodD);
+  px(2, 12, 1, 5, JP.wood);
+  px(21, 12, 1, 5, JP.wood);
+  px(2, 13, 20, 1, JP.wood);
+  roof3q(px, 12, 11, 5, 11, 3, 2, c);
+  px(21, 0, 1, 12, JP.woodD);
+  px(22, 1, 2, 6, t.m);
+}
+
+function guardTower(px: Px, team: number): void {
+  const c = ROOF[team];
+  const t = TEAMS[team];
+  px(2, 47, 26, 4, SH);
+  // sloped stone base
+  for (let r = 0; r < 12; r++) px(3 + Math.floor((11 - r) / 4), 36 + r, 22 - Math.floor((11 - r) / 4) * 2, 1, r % 3 === 0 ? JP.stoneD : JP.stone);
+  px(25, 34, 3, 14, JP.stoneD);
+  wall3q(px, 6, 22, 18, 14, 3, JP.plaster, JP.plasterD);
+  px(6, 22, 2, 14, JP.woodD);
+  px(22, 22, 2, 14, JP.woodD);
+  for (const sx of [10, 15, 19]) px(sx, 26, 1, 5, JP.ol);
+  px(6, 33, 18, 1, JP.woodD);
+  roof3q(px, 15, 14, 14, 21, 4, 2, c);
+  roof3q(px, 15, 8, 7, 12, 2, 2, c);
+  px(15, 0, 1, 6, JP.woodD);
+  px(16, 0, 4, 3, t.l);
+  nobori(px, 0, 24, 20, t);
+}
+
+/** Gold mine or stone quarry; `level` 1-4 shrinks as it is mined out. */
+export function mineSprite(kind: string, level: number): HTMLCanvasElement {
+  return make(`mine:${kind}:${level}`, 20, 18, (px) => {
+    px(2, 15, 16, 3, SH);
+    const rock = kind === 'gold' ? ['#6d6c69', '#8a8884', '#a8a59e'] : ['#7d828c', '#a0a6b0', '#c9ced6'];
+    disc(px, 10, 11, 5 + level * 0.5, rock[0]);
+    disc(px, 7, 10, 3 + level * 0.3, rock[1]);
+    disc(px, 13, 11, 3 + level * 0.3, rock[1]);
+    disc(px, 7, 8.5, 1.6, rock[2]);
+    disc(px, 12, 9.5, 1.4, rock[2]);
+    if (kind === 'gold') {
+      const spots = [[6, 11], [12, 8], [9, 13], [14, 12], [8, 7], [11, 11]];
+      for (let i = 0; i < Math.min(spots.length, level + 2); i++) {
+        const [x, y] = spots[i];
+        px(x, y, 2, 2, JP.gold);
+        px(x, y, 1, 1, '#fff2b0');
+      }
+    } else {
+      px(6, 12, 5, 1, rock[0]);
+      px(11, 8, 1, 4, rock[0]);
+      px(8, 9, 1, 1, '#e6e9ee');
+    }
+  });
+}
+
+export function buildingSprite(type: string, team: number, variant = 0): HTMLCanvasElement {
+  if (type === 'wall' || type === 'stoneWall') return make(`w:${type}:${team}:${variant}`, 16, 30, (px) => wallPiece(px, variant, type === 'stoneWall', team));
+  if (type === 'gate' || type === 'stoneGate') return make(`g:${type}:${team}:${variant}`, 16, 32, (px) => gatePiece(px, variant, type === 'stoneGate', team));
+  if (type === 'watchTower') return make(`wt:${team}`, 24, 48, (px) => watchTower(px, team));
+  if (type === 'guardTower') return make(`gt:${team}`, 28, 54, (px) => guardTower(px, team));
+  if (type === 'market') return make(`mk:${team}`, 44, 50, (px) => market(px, team));
   if (type === 'stable') return make(`stable:${team}`, 50, 50, (px) => stable(px, team));
   if (type === 'townCenter') return make(`tc:${team}`, 58, 86, (px) => pagoda(px, team, 86));
   const w = type === 'barracks' ? 44 : 42;
@@ -380,6 +548,105 @@ function armor(px: Px, o: number, t: Team3): void {
   px(o + 4, 8, 2, 1, t.d);
 }
 
+/** Straw war hat worn by the lowest tier. */
+function jingasa(px: Px, o: number): void {
+  px(o + 4, 3, 8, 1, JP.black);
+  px(o + 5, 2, 6, 1, JP.black);
+  px(o + 7, 1, 2, 1, JP.blackL);
+}
+/** The top tier's great horned helmet and face mask. */
+function hornedKabuto(px: Px, o: number): void {
+  kabuto(px, o, false);
+  px(o + 4, 0, 1, 2, JP.gold);
+  px(o + 11, 0, 1, 2, JP.gold);
+  px(o + 3, 0, 1, 1, JP.gold);
+  px(o + 12, 0, 1, 1, JP.gold);
+  px(o + 7, 0, 2, 1, JP.vermil);
+  px(o + 7, 6, 3, 1, JP.vermilD);
+}
+function lightBody(px: Px, o: number, t: Team3): void {
+  px(o + 5, 7, 6, 5, t.m);
+  px(o + 5, 7, 1, 5, t.d);
+  px(o + 7, 7, 1, 1, JP.plaster);
+  px(o + 5, 10, 6, 1, JP.plaster);
+}
+function goldTrim(px: Px, o: number): void {
+  px(o + 5, 7, 6, 1, JP.gold);
+  px(o + 4, 7, 2, 1, JP.gold);
+  px(o + 5, 11, 6, 1, JP.goldD);
+}
+
+function militia(px: Px, t: Team3, pose: Pose, frame: number): void {
+  const o = 1;
+  px(o + 3, 15, 10, 2, SH);
+  feet(px, o, pose, frame);
+  lightBody(px, o, t);
+  px(o + 6, 4, 4, 3, JP.skin);
+  px(o + 9, 4, 1, 1, JP.ol);
+  jingasa(px, o);
+  if (pose === 'attack' && frame === 1) {
+    px(o + 10, 8, 2, 2, JP.skin);
+    px(o + 12, 8, 4, 1, JP.blade);
+  } else {
+    px(o + 10, 8, 2, 2, JP.skin);
+    px(o + 12, 4, 1, 4, JP.blade);
+    px(o + 11, 8, 2, 1, JP.woodD);
+  }
+}
+
+function champion(px: Px, t: Team3, pose: Pose, frame: number): void {
+  const o = 1;
+  px(o + 3, 15, 10, 2, SH);
+  flag(px, o, t);
+  feet(px, o, pose, frame);
+  armor(px, o, t);
+  goldTrim(px, o);
+  px(o + 6, 4, 4, 3, JP.skin);
+  px(o + 9, 4, 1, 1, JP.ol);
+  hornedKabuto(px, o);
+  if (pose === 'attack' && frame === 1) {
+    px(o + 10, 8, 2, 2, JP.skin);
+    px(o + 12, 8, 5, 1, JP.blade);
+    px(o + 11, 7, 1, 3, JP.gold);
+  } else {
+    px(o + 10, 8, 2, 2, JP.skin);
+    px(o + 12, 0, 1, 8, JP.blade);
+    px(o + 11, 8, 3, 1, JP.gold);
+    px(o + 12, 9, 1, 2, JP.black);
+  }
+}
+
+function spearman(px: Px, t: Team3, pose: Pose, frame: number, tier: number): void {
+  const o = 1;
+  px(o + 3, 15, 10, 2, SH);
+  if (tier >= 1) flag(px, o, t);
+  feet(px, o, pose, frame);
+  if (tier === 0) lightBody(px, o, t);
+  else armor(px, o, t);
+  if (tier === 2) goldTrim(px, o);
+  px(o + 6, 4, 4, 3, JP.skin);
+  px(o + 9, 4, 1, 1, JP.ol);
+  if (tier === 0) jingasa(px, o);
+  else if (tier === 1) kabuto(px, o, false);
+  else hornedKabuto(px, o);
+  const thrust = pose === 'attack' && frame === 1;
+  if (thrust) {
+    px(o + 10, 8, 2, 1, JP.skin);
+    px(o + 7, 8, 9, 1, JP.woodL);
+    if (tier === 2) {
+      px(o + 15, 6, 2, 3, JP.blade);
+      px(o + 16, 9, 1, 1, JP.blade);
+    } else px(o + 16, 7, 1, 3, JP.blade);
+  } else {
+    px(o + 10, 8, 2, 1, JP.skin);
+    px(o + 12, 2, 1, 13, JP.woodL);
+    if (tier === 2) {
+      px(o + 12, 0, 2, 3, JP.blade);
+      px(o + 14, 1, 1, 1, JP.blade);
+    } else px(o + 12, 0, 1, 2, JP.blade);
+  }
+}
+
 function swordsman(px: Px, t: Team3, pose: Pose, frame: number): void {
   const o = 1;
   px(o + 3, 15, 10, 2, SH);
@@ -402,7 +669,7 @@ function swordsman(px: Px, t: Team3, pose: Pose, frame: number): void {
   }
 }
 
-function archer(px: Px, t: Team3, pose: Pose, frame: number): void {
+function archer(px: Px, t: Team3, pose: Pose, frame: number, tier = 1): void {
   const o = 1;
   px(o + 3, 15, 10, 2, SH);
   px(o + 2, 5, 2, 7, JP.woodL);
@@ -410,9 +677,10 @@ function archer(px: Px, t: Team3, pose: Pose, frame: number): void {
   px(o + 3, 3, 1, 2, JP.plaster);
   feet(px, o, pose, frame);
   armor(px, o, t);
+  if (tier === 2) goldTrim(px, o);
   px(o + 6, 4, 4, 3, JP.skin);
   px(o + 9, 4, 1, 1, JP.ol);
-  kabuto(px, o, false);
+  kabuto(px, o, tier === 2);
   px(o + 10, 8, 2, 1, JP.skin);
   // tall yumi bow
   px(o + 13, 1, 1, 14, JP.woodL);
@@ -483,7 +751,7 @@ function legs4(px: Px, frame: number, x0: number, y: number): void {
   const xs = frame ? [x0, x0 + 3, x0 + 8, x0 + 11] : [x0 + 1, x0 + 3, x0 + 8, x0 + 10];
   xs.forEach((x, i) => px(x, y, 1, frame && (i === 1 || i === 2) ? 2 : 3, HORSE.bodyD));
 }
-/** Scout: a light horse archer in hunting clothes. */
+/** Scout: a light rider in a straw war hat with a sword. */
 function scout(px: Px, t: Team3, pose: Pose, frame: number): void {
   px(2, 15, 15, 2, SH);
   legs4(px, pose === 'walk' ? frame : 0, 3, 13);
@@ -497,30 +765,22 @@ function scout(px: Px, t: Team3, pose: Pose, frame: number): void {
   px(12, 4, 1, 4, HORSE.mane);
   px(5, 9, 6, 3, t.m);
   px(5, 9, 6, 1, t.l);
-  px(5, 12, 1, 1, t.l);
-  px(10, 12, 1, 1, t.l);
+  // rider
   px(7, 4, 4, 5, t.l);
-  px(7, 6, 4, 1, t.d);
+  px(7, 7, 4, 1, t.d);
   px(8, 2, 3, 2, JP.skin);
   px(10, 2, 1, 1, JP.ol);
-  px(7, 1, 5, 1, JP.black);
-  px(8, 0, 3, 1, JP.black);
+  px(6, 1, 6, 1, JP.straw);
+  px(7, 0, 4, 1, JP.strawD);
   if (pose === 'attack' && frame === 1) {
-    px(15, 0, 1, 10, JP.woodL);
-    for (const [x, y] of [
-      [14, 1],
-      [13, 3],
-      [12, 5],
-      [13, 7],
-      [14, 9],
-    ])
-      px(x, y, 1, 1, JP.plasterD);
-    px(11, 5, 7, 1, JP.plaster);
+    px(11, 5, 2, 1, JP.skin);
+    px(12, 5, 6, 1, JP.blade);
+    px(12, 4, 1, 3, JP.gold);
   } else {
-    px(13, 0, 1, 11, JP.woodL);
-    px(12, 0, 1, 11, JP.plasterD);
+    px(11, 6, 1, 2, JP.skin);
+    px(12, 1, 1, 6, JP.blade);
+    px(11, 6, 3, 1, JP.gold);
   }
-  px(5, 4, 2, 5, JP.woodL);
 }
 /** Heavy cavalry: horse in team-colored scale armor, rider with horned helmet and naginata. */
 function armored(px: Px, t: Team3, pose: Pose, frame: number): void {
@@ -556,15 +816,18 @@ function armored(px: Px, t: Team3, pose: Pose, frame: number): void {
   }
 }
 
-export function unitSprite(type: string, team: number, pose: Pose, frame: number, carry: string, variant = 0): HTMLCanvasElement {
+/** `tier` is the owner's age: 0 Dark, 1 Feudal, 2 Imperial. Soldiers look tougher each age. */
+export function unitSprite(type: string, team: number, pose: Pose, frame: number, carry: string, tier = 0): HTMLCanvasElement {
   const t = TEAMS[team] ?? TEAMS[2];
   if (type === 'scout') return make(`u:scout:${team}:${pose}:${frame}`, 20, 18, (px) => scout(px, t, pose, frame));
-  if (type === 'cavalry' && variant % 2 === 1) return make(`u:hcav:${team}:${pose}:${frame}`, 22, 19, (px) => armored(px, t, pose, frame));
+  if (type === 'cavalry' && tier >= 2) return make(`u:hcav:${team}:${pose}:${frame}`, 22, 19, (px) => armored(px, t, pose, frame));
   if (type === 'cavalry') return make(`u:cav:${team}:${pose}:${frame}`, 20, 18, (px) => cavalry(px, t, pose, frame));
-  return make(`u:${type}:${team}:${pose}:${frame}:${carry}`, 18, 18, (px) => {
+  const k = type === 'villager' ? 0 : tier;
+  return make(`u:${type}:${team}:${pose}:${frame}:${carry}:${k}`, 18, 18, (px) => {
     if (type === 'villager') villager(px, t, pose, frame, carry);
-    else if (type === 'swordsman') swordsman(px, t, pose, frame);
-    else archer(px, t, pose, frame);
+    else if (type === 'swordsman') (k === 0 ? militia : k === 1 ? swordsman : champion)(px, t, pose, frame);
+    else if (type === 'spearman') spearman(px, t, pose, frame, k);
+    else archer(px, t, pose, frame, Math.max(1, k));
   });
 }
 

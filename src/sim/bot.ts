@@ -2,6 +2,7 @@
 // difficulty only changes how often and how well it makes decisions.
 
 import {
+  AGES,
   BUILDINGS,
   DIFFICULTY,
   OPENINGS,
@@ -19,7 +20,10 @@ import {
 import {
   T,
   World,
+  canAfford,
   canPlace,
+  startResearch,
+  unitAvailable,
   distToEntity,
   isSoldier,
   nearestDropoff,
@@ -46,6 +50,7 @@ export interface Bot {
   lastThreatAt: number;
   fleeing: Set<number>;
   defending: Set<number>;
+  saving: boolean; // saving up to advance an age
 }
 
 export function createBot(w: World, team: number, diffKey: DifficultyKey, openingKey?: OpeningKey): Bot {
@@ -64,6 +69,7 @@ export function createBot(w: World, team: number, diffKey: DifficultyKey, openin
     lastThreatAt: -99,
     fleeing: new Set(),
     defending: new Set(),
+    saving: false,
   };
 }
 
@@ -119,7 +125,7 @@ function pickBuilder(w: World, bot: Bot, x: number, y: number): Entity | null {
 }
 
 function tryBuild(w: World, bot: Bot, type: BuildingType, x: number, y: number, minR: number, maxR: number): boolean {
-  if (w.teams[bot.team].wood < BUILDINGS[type].wood) return false;
+  if (!canAfford(w, bot.team, BUILDINGS[type].cost) || w.teams[bot.team].age < BUILDINGS[type].age) return false;
   const spot = findBuildSpot(w, bot.team, type, x, y, minR, maxR);
   if (!spot) return false;
   const b = pickBuilder(w, bot, (spot.tx + 1) * T, (spot.ty + 1) * T);
@@ -137,28 +143,41 @@ function economy(w: World, bot: Bot, tc: Entity): void {
   // villagers
   if (vills.length + queuedV < target && tc.queue.length < 2) train(w, tc, 'villager');
 
-  // put idle villagers to work
+  // put idle villagers to work: food and wood first, gold and stone from the Feudal Age
   const threat = bot.threatSince >= 0;
-  let food = 0;
-  let wood = 0;
-  for (const v of vills) {
-    if (v.order.type === 'gather') {
-      if (kindOf(v.order.resType) === 'food') food++;
-      else wood++;
-    }
-  }
+  const have: Record<ResKind, number> = { food: 0, wood: 0, gold: 0, stone: 0 };
+  for (const v of vills) if (v.order.type === 'gather') have[kindOf(v.order.resType)]++;
+  const share = (n: number): Record<ResKind, number> => {
+    const gold = team.age >= 1 ? 0.18 : 0;
+    const stone = team.age >= 1 && bot.opening.towers > 0 ? 0.08 : 0;
+    const rest = 1 - gold - stone;
+    return { food: n * rest * bot.opening.foodShare, wood: n * rest * (1 - bot.opening.foodShare), gold: n * gold, stone: n * stone };
+  };
   for (const v of vills) {
     if (v.order.type !== 'idle') continue;
     if (threat && bot.fleeing.has(v.id)) continue;
     bot.fleeing.delete(v.id);
-    const wantFood = food < Math.round((food + wood + 1) * bot.opening.foodShare);
-    const kind: ResKind = wantFood ? 'food' : 'wood';
-    let res = nearestResource(w, v.x, v.y, (r) => RESOURCES[r.type as ResourceType].kind === kind, 30 * T);
-    if (!res) res = nearestResource(w, v.x, v.y, () => true, 40 * T);
+    const want = share(have.food + have.wood + have.gold + have.stone + 1);
+    const kinds: ResKind[] = ['food', 'wood', 'gold', 'stone'];
+    kinds.sort((a, b) => have[a] - want[a] - (have[b] - want[b]));
+    let res: Entity | null = null;
+    for (const kind of kinds) {
+      res = nearestResource(w, v.x, v.y, (r) => RESOURCES[r.type as ResourceType].kind === kind, 40 * T);
+      if (res) break;
+    }
     if (!res) continue;
     setOrder(v, { type: 'gather', target: res.id, resType: res.type as ResourceType, phase: 'go', dropId: 0 });
-    if (kind === 'food') food++;
-    else wood++;
+    have[kindOf(res.type as ResourceType)]++;
+  }
+
+  // advance through the ages
+  const nextAge = team.age + 1;
+  const ageAt = nextAge === 1 ? bot.opening.feudalAtVillagers : bot.opening.imperialAtVillagers;
+  bot.saving = false;
+  if (nextAge <= 2 && vills.length >= ageAt && !w.buildings.some((b) => b.team === bot.team && b.research?.key === 'age')) {
+    if (canAfford(w, bot.team, AGES[nextAge].cost)) {
+      if (tc.queue.length === 0) startResearch(w, tc, 'age');
+    } else bot.saving = true; // hold back on the army to afford it
   }
 
   const unfinished = teamBuildings(w, bot.team).filter((b) => b.progress < 1);
@@ -194,21 +213,21 @@ function economy(w: World, bot: Bot, tc: Entity): void {
     }
   }
 
-  // military buildings: whichever the opening's army needs first, then the other
+  // military buildings: a Barracks first, a Stable once the Feudal Age allows it
   const toward = { x: tc.x + (w.w * T / 2 - tc.x) * 0.25, y: tc.y + (w.h * T / 2 - tc.y) * 0.25 };
-  const foot = (types: string[]): boolean => types.some((k) => k === 'swordsman' || k === 'archer');
-  const firstMix = Object.keys(bot.opening.mix);
-  const allMix = [...firstMix, ...Object.keys(bot.opening.mixAfter)];
-  const first: BuildingType = foot(firstMix) ? 'barracks' : 'stable';
-  const second: BuildingType = first === 'barracks' ? 'stable' : 'barracks';
-  const needSecond = second === 'stable' ? allMix.includes('cavalry') : foot(allMix);
+  const allMix = [...Object.keys(bot.opening.mix), ...Object.keys(bot.opening.mixAfter)];
   const count = (t: BuildingType): number => teamBuildings(w, bot.team, t).length;
-  if (count(first) === 0 && vills.length >= bot.opening.barracksAtVillagers) {
-    tryBuild(w, bot, first, toward.x, toward.y, 2, 9);
-  } else if (count(first) > 0 && count(second) === 0 && needSecond && vills.length >= bot.opening.barracksAtVillagers + 5) {
-    tryBuild(w, bot, second, toward.x, toward.y, 2, 10);
+  if (bot.saving) return;
+  if (count('barracks') === 0 && vills.length >= bot.opening.barracksAtVillagers) {
+    tryBuild(w, bot, 'barracks', toward.x, toward.y, 2, 9);
+  } else if (team.age >= 1 && count('stable') === 0 && allMix.includes('cavalry')) {
+    tryBuild(w, bot, 'stable', toward.x, toward.y, 2, 10);
   } else if (count('barracks') === 1 && bot.diffKey !== 'easy' && vills.length >= 20) {
     tryBuild(w, bot, 'barracks', toward.x, toward.y, 2, 10);
+  } else if (team.age >= 1 && count('guardTower') + count('watchTower') < bot.opening.towers) {
+    // guard towers on the side facing the enemy
+    const out = { x: tc.x + (w.w * T / 2 - tc.x) * 0.15, y: tc.y + (w.h * T / 2 - tc.y) * 0.15 };
+    tryBuild(w, bot, 'guardTower', out.x, out.y, 3, 8);
   }
 }
 
@@ -232,7 +251,7 @@ function military(w: World, bot: Bot): void {
     let pick: UnitType | null = null;
     let worst = -Infinity;
     for (const [k, wt] of Object.entries(mix) as [UnitType, number][]) {
-      if (!canTrain.includes(k)) continue;
+      if (!canTrain.includes(k) || !unitAvailable(w, bot.team, k)) continue;
       const deficit = wt / wsum - (counts[k] ?? 0) / total;
       if (deficit > worst) {
         worst = deficit;
@@ -240,9 +259,10 @@ function military(w: World, bot: Bot): void {
       }
     }
     if (!pick) continue;
-    const u = UNITS[pick];
+    const cost = UNITS[pick].cost;
     const reserve = villagersWanted && tc && tc.queue.length === 0 ? 50 : 0;
-    if (team.food >= u.food + reserve && team.wood >= u.wood) train(w, b, pick);
+    if (bot.saving) continue;
+    if (team.food >= (cost.food ?? 0) + reserve && canAfford(w, bot.team, cost)) train(w, b, pick);
   }
 }
 

@@ -13,9 +13,12 @@
         <div id="topbar">
           <span class="res"><i class="sw food"></i><b id="r-food">0</b></span>
           <span class="res"><i class="sw wood"></i><b id="r-wood">0</b></span>
+          <span class="res"><i class="sw gold"></i><b id="r-gold">0</b></span>
+          <span class="res"><i class="sw stone"></i><b id="r-stone">0</b></span>
           <span class="res"><i class="sw pop"></i><b id="r-pop">0/0</b></span>
           <button id="idle-btn" class="res" title="Select next idle villager (Q)"><i class="sw idle"></i><b id="r-idle">0</b> idle</button>
           <span class="spacer"></span>
+          <span id="r-age">Dark Age</span>
           <span id="r-time">00:00</span>
           <button id="menu-btn" title="Pause (Esc)">Menu</button>
         </div>
@@ -53,8 +56,8 @@
             <button data-d="hard">Hard</button>
           </div>
           <p class="hint" id="diff-hint"></p>
-          <div class="label">Theme</div>
-          <div id="theme" class="choices">
+          <div class="label" hidden>Theme</div>
+          <div id="theme" class="choices" hidden>
             <button data-t="sakura">Sakura Village</button>
             <button data-t="classic">Classic</button>
           </div>
@@ -106,9 +109,9 @@
               <dt>Right click</dt><dd>Move, gather, build or attack</dd>
               <dt>Shift + click</dt><dd>Add to selection; place several buildings</dd>
               <dt>Shift + right click</dt><dd>Queue orders (waypoints, tree then sheep)</dd>
-              <dt>Z X C V B</dt><dd>Command buttons. Soldiers: line, block, box, Hostile, Stand down</dd>
+              <dt>Z X C V B N, F</dt><dd>Commands; F: walls page</dd>
               <dt>Double click building</dt><dd>Select all of that kind; train in each</dd>
-              <dt>Right click, building</dt><dd>Set its rally point</dd>
+              <dt>Right click, building</dt><dd>Rally point; villagers repair it; troops enter towers</dd>
             </dl>
             <dl>
               <dt>W A S D / arrows</dt><dd>Move the camera (or screen edge)</dd>
@@ -120,7 +123,7 @@
               <dt>M / Esc</dt><dd>Mute / pause</dd>
             </dl>
           </div>
-          <p class="hint">Archers &gt; Swordsmen &gt; Cavalry &gt; Archers. Destroy their Town Center to win.</p>
+          <p class="hint">Spears beat horses. Armor stops arrows. Destroy their Town Center to win.</p>
           <button id="help-close" class="big">Back</button>
         </div>
       </div>

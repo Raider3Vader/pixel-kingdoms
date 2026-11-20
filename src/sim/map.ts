@@ -4,7 +4,7 @@ import { ECONOMY } from '../config';
 import { findPath } from './path';
 import { ENEMY, PLAYER, T, World, spawnBuilding, spawnResource, spawnUnit, type Entity } from './world';
 
-export const PLAYER_TC = { tx: 4, ty: 4 };
+export const PLAYER_TC = { tx: 6, ty: 6 };
 
 export interface Setup {
   world: World;
@@ -28,23 +28,23 @@ export function createMatch(seed: number): Setup {
   };
   const rand = (): number => w.rng();
 
-  // the near forests: one east of the village, one south
-  for (let y = 0; y <= 11; y++) for (let x = 14; x <= 21; x++) if (rand() < 0.85 - Math.max(0, (x - 18) * 0.15)) setF(x, y);
-  for (let y = 14; y <= 21; y++) for (let x = 0; x <= 10; x++) if (rand() < 0.8 - Math.max(0, (y - 18) * 0.15)) setF(x, y);
+  // the near forests: one east of the village, one south (with gaps to walk through)
+  for (let y = 0; y <= 15; y++) for (let x = 19; x <= 29; x++) if (rand() < 0.66 - Math.max(0, (x - 25) * 0.12)) setF(x, y);
+  for (let y = 19; y <= 29; y++) for (let x = 0; x <= 15; x++) if (rand() < 0.64 - Math.max(0, (y - 25) * 0.12)) setF(x, y);
 
-  // random woods across the map
-  for (let i = 0; i < 11; i++) {
+  // random woods across the map, loosely packed
+  for (let i = 0; i < 18; i++) {
     for (let tries = 0; tries < 30; tries++) {
       const cx = 4 + rand() * (N - 8);
       const cy = 4 + rand() * (N - 8);
       if (cx + cy > N - 2) continue; // top-left half only; it is mirrored below
       const dBase = Math.hypot(cx - tcC.x, cy - tcC.y);
       const dEnemy = Math.hypot(cx - enemyC.x, cy - enemyC.y);
-      if (dBase < 13 || dEnemy < 13) continue;
-      const r = 1.8 + rand() * 2.6;
+      if (dBase < 18 || dEnemy < 18) continue;
+      const r = 2 + rand() * 2.8;
       for (let y = Math.floor(cy - r - 1); y <= cy + r + 1; y++) {
         for (let x = Math.floor(cx - r - 1); x <= cx + r + 1; x++) {
-          if (Math.hypot(x - cx, y - cy) < r + rand() * 0.9 - 0.3) setF(x, y);
+          if (Math.hypot(x - cx, y - cy) < r + rand() * 0.9 - 0.3 && rand() < 0.72) setF(x, y);
         }
       }
       break;
@@ -59,10 +59,10 @@ export function createMatch(seed: number): Setup {
     const ry = y + 0.5 - C;
     const s = (rx - ry) / Math.SQRT2; // along the river
     const d = (rx + ry) / Math.SQRT2; // across it
-    const off = d - 3.2 * Math.sin(s / 6.5);
-    const crossing = Math.abs(s) < 1.6 || Math.abs(Math.abs(s) - 17) < 1.6;
-    const inRiver = Math.abs(off) < 1.45;
-    return { water: inRiver && !crossing, bridge: inRiver && crossing, near: Math.abs(off) < 3.5 && (Math.abs(s) < 3.5 || Math.abs(Math.abs(s) - 17) < 3.5) };
+    const off = d - 4.5 * Math.sin(s / 9.5);
+    const crossing = Math.abs(s) < 1.6 || Math.abs(Math.abs(s) - 26) < 1.6;
+    const inRiver = Math.abs(off) < 1.5;
+    return { water: inRiver && !crossing, bridge: inRiver && crossing, near: Math.abs(off) < 3.5 && (Math.abs(s) < 3.5 || Math.abs(Math.abs(s) - 26) < 3.5) };
   };
   for (let y = 0; y < N; y++) {
     for (let x = 0; x < N; x++) {
@@ -80,7 +80,7 @@ export function createMatch(seed: number): Setup {
   // keep the villages clear
   for (let y = 0; y < N; y++) {
     for (let x = 0; x < N; x++) {
-      if (Math.hypot(x + 0.5 - tcC.x, y + 0.5 - tcC.y) < 7.5) forest[y * N + x] = 0;
+      if (Math.hypot(x + 0.5 - tcC.x, y + 0.5 - tcC.y) < 10) forest[y * N + x] = 0;
     }
   }
 
@@ -111,33 +111,48 @@ export function createMatch(seed: number): Setup {
     fn(mx, my);
   };
   const berryTiles = [
-    [10, 4],
-    [11, 4],
-    [10, 5],
-    [11, 5],
-    [10, 6],
-    [11, 6],
+    [12, 6],
+    [13, 6],
+    [12, 7],
+    [13, 7],
+    [12, 8],
+    [13, 8],
   ];
   for (const [x, y] of berryTiles) both((a, b) => spawnResource(w, 'berries', a, b), x, y);
   const sheepTiles = [
-    [3, 10],
-    [5, 11],
-    [7, 10],
-    [4, 12],
+    [5, 12],
+    [7, 13],
+    [9, 12],
+    [6, 14],
   ];
   for (const [x, y] of sheepTiles) both((a, b) => spawnResource(w, 'sheep', a, b), x, y);
+  // a gold mine and a stone quarry within walking distance of each village
+  const goldTiles = [
+    [14, 13],
+    [15, 13],
+    [14, 14],
+    [15, 14],
+  ];
+  for (const [x, y] of goldTiles) both((a, b) => spawnResource(w, 'gold', a, b), x, y);
+  const stoneTiles = [
+    [2, 15],
+    [3, 15],
+    [2, 16],
+  ];
+  for (const [x, y] of stoneTiles) both((a, b) => spawnResource(w, 'stone', a, b), x, y);
 
-  // extra berry patches further out
-  for (let i = 0; i < 2; i++) {
-    for (let tries = 0; tries < 50; tries++) {
+  // extra food, gold and stone further out, worth fighting over
+  const patches: ('berries' | 'gold' | 'stone')[] = ['berries', 'berries', 'gold', 'gold', 'stone'];
+  for (const kind of patches) {
+    for (let tries = 0; tries < 80; tries++) {
       const cx = Math.floor(8 + rand() * (N - 16));
       const cy = Math.floor(8 + rand() * (N - 16));
-      if (cx + cy > N - 4) continue;
-      if (Math.hypot(cx - tcC.x, cy - tcC.y) < 16) continue;
+      if (cx + cy > N - 6) continue;
+      if (Math.hypot(cx - tcC.x, cy - tcC.y) < 22) continue;
       let clear = true;
-      for (let y = cy - 1; y <= cy + 2 && clear; y++) for (let x = cx - 1; x <= cx + 2; x++) if (forest[y * N + x]) clear = false;
+      for (let y = cy - 1; y <= cy + 2 && clear; y++) for (let x = cx - 1; x <= cx + 2; x++) if (forest[y * N + x] || w.blocked[y * N + x]) clear = false;
       if (!clear) continue;
-      for (let y = cy; y < cy + 2; y++) for (let x = cx; x < cx + 2; x++) both((a, b) => spawnResource(w, 'berries', a, b), x, y);
+      for (let y = cy; y < cy + 2; y++) for (let x = cx; x < cx + 2; x++) both((a, b) => spawnResource(w, kind, a, b), x, y);
       break;
     }
   }

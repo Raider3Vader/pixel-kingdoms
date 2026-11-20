@@ -11,6 +11,7 @@ import {
   corpseSprite,
   foundationSprite,
   getTheme,
+  mineSprite,
   sheepSprite,
   treeSprite,
   unitSprite,
@@ -193,7 +194,7 @@ interface Drawable {
 export interface DrawOptions {
   selected: Set<number>;
   hoverId: number;
-  ghost: Ghost | null;
+  ghosts: Ghost[];
   rallyFor: Entity | null;
   fog: boolean;
   time: number;
@@ -252,7 +253,10 @@ export function drawWorld(ctx: CanvasRenderingContext2D, w: World, terrain: HTML
             const s = berrySprite(Math.ceil((e.amount / e.startAmount) * 8));
             ctx.drawImage(s, Math.round(e.x - s.width / 2), (e.ty + 1) * T - s.height + (sak ? 3 : 0));
           }
-          else {
+          else if (e.type === 'gold' || e.type === 'stone') {
+            const s = mineSprite(e.type, Math.ceil((e.amount / e.startAmount) * 4));
+            ctx.drawImage(s, Math.round(e.x - s.width / 2), (e.ty + 1) * T - s.height + 2);
+          } else {
             const frame = Math.floor(t * 0.7 + e.id) % 3 === 0 ? 1 : 0;
             drawFlipped(ctx, sheepSprite(frame), e.tx * T, e.ty * T, e.id % 2 === 0);
           }
@@ -270,7 +274,7 @@ export function drawWorld(ctx: CanvasRenderingContext2D, w: World, terrain: HTML
     items.push({
       y: (b.ty + b.size) * T,
       draw: () => {
-        const spr = buildingSprite(b.type, b.team);
+        const spr = buildingSprite(b.type, b.team, buildingVariant(w, b));
         const { x, y } = buildingPos(b, spr);
         const sel = o.selected.has(b.id);
         if (sel || o.hoverId === b.id) bracket(ctx, b.tx * T - 1, b.ty * T - 1, b.size * T + 2, b.size * T + 2, b.team === PLAYER ? PAL.white : PAL.orange);
@@ -278,7 +282,7 @@ export function drawWorld(ctx: CanvasRenderingContext2D, w: World, terrain: HTML
         const tall = spr.height > b.size * T + 12;
         if (tall && b.progress >= 1 && w.units.some((u) => !u.dead && u.x > x && u.x < x + spr.width && u.y > y && u.y < b.ty * T && (!o.fog || u.team === PLAYER || vis[Math.floor(u.y / T) * w.w + Math.floor(u.x / T)] === 1))) ctx.globalAlpha = 0.6;
         if (b.progress < 1) {
-          ctx.drawImage(foundationSprite(b.size), b.tx * T, b.ty * T - 8);
+          ctx.drawImage(foundationSprite(b.size), b.tx * T, (b.ty + b.size) * T - foundationSprite(b.size).height);
           const h = spr.height;
           const shown = Math.floor(h * b.progress);
           if (shown > 0) ctx.drawImage(spr, 0, h - shown, spr.width, shown, x, y + h - shown, spr.width, shown);
@@ -288,7 +292,7 @@ export function drawWorld(ctx: CanvasRenderingContext2D, w: World, terrain: HTML
         } else {
           ctx.drawImage(spr, x, y);
           ctx.globalAlpha = 1;
-          if (b.hp < b.maxHp * 0.5) flames(ctx, b, t);
+          if (b.hp < b.maxHp * 0.5 && b.size > 1) flames(ctx, b, t);
         }
       },
     });
@@ -296,7 +300,7 @@ export function drawWorld(ctx: CanvasRenderingContext2D, w: World, terrain: HTML
 
   // units
   for (const u of w.units) {
-    if (u.dead) continue;
+    if (u.dead || u.inside) continue;
     if (u.x < cx - 16 || u.x > cx + vw + 16 || u.y < cy - 16 || u.y > cy + vh + 24) continue;
     const utx = Math.floor(u.x / T);
     const uty = Math.floor(u.y / T);
@@ -312,7 +316,7 @@ export function drawWorld(ctx: CanvasRenderingContext2D, w: World, terrain: HTML
         else if (pose === 'work') frame = Math.floor(u.animT * 3) % 2;
         else if (pose === 'attack') frame = u.cooldown > 0 && u.cooldown > (u.type === 'villager' ? 1.2 : 0.75) ? 1 : 0;
         const carry = u.type === 'villager' && u.carry >= 1 ? (u.carryKind ?? '') : '';
-        const spr = unitSprite(u.type, u.team, pose, frame, carry, u.id);
+        const spr = unitSprite(u.type, u.team, pose, frame, carry, w.teams[u.team]?.age ?? 0);
         drawFlipped(ctx, spr, Math.round(u.x) - Math.floor(spr.width / 2), Math.round(u.y) - spr.height + 3, u.facing < 0);
       },
     });
@@ -323,7 +327,7 @@ export function drawWorld(ctx: CanvasRenderingContext2D, w: World, terrain: HTML
 
   // health bars for selected or recently hurt things
   for (const e of [...w.units, ...w.buildings]) {
-    if (e.dead) continue;
+    if (e.dead || e.inside) continue;
     if (!(o.selected.has(e.id) || t - e.lastHurt < 3 || (e.kind === 'building' && e.progress < 1 && e.team === PLAYER))) continue;
     if (o.fog && e.team !== PLAYER) {
       const etx = Math.floor(e.x / T);
@@ -385,9 +389,8 @@ export function drawWorld(ctx: CanvasRenderingContext2D, w: World, terrain: HTML
     ctx.fillRect(Math.round(r.x) + 1, Math.round(r.y) - 9, 4, 3);
   }
 
-  // placement ghost
-  if (o.ghost) {
-    const g = o.ghost;
+  // placement ghosts (one building, or a line of wall pieces)
+  for (const g of o.ghosts) {
     const s = BUILDINGS[g.type].size;
     ctx.globalAlpha = 0.6;
     const gs = buildingSprite(g.type, PLAYER);
@@ -434,6 +437,23 @@ export function drawWorld(ctx: CanvasRenderingContext2D, w: World, terrain: HTML
   }
 
   ctx.setTransform(1, 0, 0, 1, 0, 0);
+}
+
+/** Walls join their neighbours; gates show open when one of their own units is close. */
+export function buildingVariant(w: World, b: Entity): number {
+  const st = BUILDINGS[b.type as BuildingType];
+  if (!st.wall) return 0;
+  const isWall = (x: number, y: number): boolean => {
+    if (!w.inBounds(x, y)) return false;
+    const id = w.occ[y * w.w + x];
+    const o = id ? w.ents.get(id) : undefined;
+    return !!o && !o.dead && o.kind === 'building' && o.team === b.team && !!BUILDINGS[o.type as BuildingType].wall;
+  };
+  const mask = (isWall(b.tx, b.ty - 1) ? 1 : 0) | (isWall(b.tx + 1, b.ty) ? 2 : 0) | (isWall(b.tx, b.ty + 1) ? 4 : 0) | (isWall(b.tx - 1, b.ty) ? 8 : 0);
+  if (!st.gate) return mask;
+  const vertical = (mask & 5) !== 0 && (mask & 10) === 0;
+  const open = !b.locked && b.progress >= 1 && w.units.some((u) => !u.dead && u.team === b.team && Math.abs(u.x - b.x) < 22 && Math.abs(u.y - b.y) < 22);
+  return (open ? 1 : 0) | (vertical ? 2 : 0) | (b.locked ? 4 : 0);
 }
 
 /** Where to draw a building sprite: centered on its footprint, bottom aligned. */
@@ -521,13 +541,14 @@ export function drawMinimap(ctx: CanvasRenderingContext2D, w: World, cam: Camera
   for (let i = 0; i < w.w * w.h; i++) set(i, '#3e8948');
   for (let i = 0; i < w.w * w.h; i++) if (w.water[i]) set(i, '#3f78c4');
   else if (w.bridge[i]) set(i, '#c08a52');
-  for (const r of w.resources) set(r.ty * w.w + r.tx, r.type === 'tree' ? '#1f5536' : r.type === 'berries' ? '#d63a4a' : '#ecebe4');
+  for (const r of w.resources) set(r.ty * w.w + r.tx, r.type === 'tree' ? '#1f5536' : r.type === 'berries' ? '#d63a4a' : r.type === 'gold' ? '#ffcd75' : r.type === 'stone' ? '#94b0c2' : '#ecebe4');
   for (const b of w.buildings) {
     if (fog && b.team !== PLAYER && !b.seen) continue;
     const c = TEAM[b.team].light;
     for (let y = b.ty; y < b.ty + b.size; y++) for (let x = b.tx; x < b.tx + b.size; x++) set(y * w.w + x, c);
   }
   for (const u of w.units) {
+    if (u.inside) continue;
     const tx = Math.floor(u.x / T);
     const ty = Math.floor(u.y / T);
     if (!w.inBounds(tx, ty)) continue;

@@ -1,7 +1,7 @@
 // One match: owns the world, the enemy AI, the camera, input and the HUD.
 
 import { Audio } from './audio';
-import { BUILDINGS, RENDER, SIM, UNITS, type BuildingType, type DifficultyKey, type UnitType, OPENINGS } from './config';
+import { AGES, BUILDINGS, MAP, MARKET, RESOURCES, OPENINGS, RENDER, SIM, TOWER_UPGRADE, UNITS, costText, unitStats, type BuildingType, type Cost, type DifficultyKey, type UnitType } from './config';
 import { buildingPos, buildTerrain, drawMinimap, drawWorld, Effects, type Camera, type Ghost } from './render/renderer';
 import { buildingSprite, iconFor } from './render/sprites';
 import { createBot, updateBot, type Bot } from './sim/bot';
@@ -18,8 +18,22 @@ import {
   entityAt,
   isSoldier,
   orderMove,
+  buyResource,
+  canAfford,
+  cancelResearch,
+  garrisoned,
+  lineTiles,
+  MAX_WALL,
   orderFormation,
   placeBuilding,
+  placeWallLine,
+  researchInfo,
+  setGateLocked,
+  shortOf,
+  startResearch,
+  tradeIncome,
+  ungarrison,
+  type ResearchKey,
   queueOrder,
   setOrder,
   smartOrder,
@@ -29,15 +43,15 @@ import {
   type Entity,
 } from './sim/world';
 
-type Mode = { kind: 'none' } | { kind: 'place'; type: BuildingType } | { kind: 'attackMove' };
+type Mode = { kind: 'none' } | { kind: 'place'; type: BuildingType } | { kind: 'wall'; type: BuildingType; start: { tx: number; ty: number } | null } | { kind: 'attackMove' };
 
 interface Cmd {
   key: string;
   icon: string;
   label: string;
   status?: string; // short state shown under the icon, e.g. On / Off
-  food?: number;
-  wood?: number;
+  cost?: Cost;
+  locked?: boolean; // needs a later age
   enabled: boolean;
   active?: boolean;
   tip: string;
@@ -49,17 +63,25 @@ const $ = <E extends HTMLElement>(id: string): E => document.getElementById(id) 
 const TIPS: Record<string, string> = {
   house: '+5 population.',
   storehouse: 'Drop-off for food and wood. Build it next to trees or berries to cut walking time.',
-  barracks: 'Trains Swordsmen and Archers.',
+  barracks: 'Trains the sword and spear lines, and Archers from the Feudal Age.',
   stable: 'Trains Cavalry and Scouts.',
+  market: 'Trade earns gold over time. Buy food, wood and stone with gold, and hire merchants for more trade.',
+  wall: 'Cheap wooden wall that keeps enemies out.',
+  gate: 'Wooden gate: your units walk through, enemies do not. Can be locked.',
+  stoneWall: 'Strong stone wall.',
+  stoneGate: 'Strong stone gate: your units walk through, enemies do not. Can be locked.',
+  watchTower: 'Sees far to warn you of attacks. Can be upgraded in the Feudal Age.',
+  guardTower: 'Shoots arrows and holds 5 troops; each archer inside adds an arrow.',
+  spearman: 'Cheap and deadly against horses. Weak to swords and arrows.',
   villager: 'Gathers food and wood, and builds.',
-  swordsman: 'Tough frontline. Beats Cavalry, loses to Archers. Good against buildings.',
-  archer: 'Shoots from 5 tiles. Beats Swordsmen, loses to Cavalry.',
-  cavalry: 'Fast raider. Beats Archers, loses to Swordsmen.',
+  swordsman: 'Solid frontline that beats spearmen and wrecks buildings.',
+  archer: 'Good against most things from range. Weak up close and against heavy armor.',
+  cavalry: 'Fast and a bit stronger than swordsmen. Runs down archers. Fears spears.',
   scout: 'Very fast and sees far. Weak arrows from 3 tiles. Explores without picking fights.',
 };
 
-function icon(type: string, team: number, size: number): HTMLCanvasElement {
-  const src = iconFor(type, team);
+function icon(type: string, team: number, size: number, tier = 0): HTMLCanvasElement {
+  const src = iconFor(type, team, tier);
   const c = document.createElement('canvas');
   const s = Math.max(src.width, src.height);
   c.width = s;
@@ -69,6 +91,15 @@ function icon(type: string, team: number, size: number): HTMLCanvasElement {
   ctx.drawImage(src, Math.floor((s - src.width) / 2), Math.floor((s - src.height) / 2));
   c.style.width = c.style.height = `calc(${size}px * var(--s))`;
   return c;
+}
+
+/** "50F 20W" style cost for small buttons. */
+function shortCost(c: Cost): string {
+  const letter: Record<string, string> = { food: 'F', wood: 'W', gold: 'G', stone: 'S' };
+  return Object.entries(c)
+    .filter(([, v]) => (v ?? 0) > 0)
+    .map(([k, v]) => `${v}${letter[k]}`)
+    .join(' ');
 }
 
 function fmtTime(t: number): string {
@@ -157,10 +188,11 @@ export class Game {
 
   private clampCam(): void {
     const z = this.cam.zoom;
-    const maxX = this.world.w * T - RENDER.width / z;
-    const minY = -RENDER.hudTop / z;
-    const maxY = this.world.h * T - (RENDER.height - RENDER.hudBottom) / z;
-    this.cam.x = Math.max(0, Math.min(maxX, this.cam.x));
+    const m = MAP.cameraMargin; // a little room to look past the edge of the map
+    const maxX = this.world.w * T - RENDER.width / z + m;
+    const minY = -RENDER.hudTop / z - m;
+    const maxY = this.world.h * T - (RENDER.height - RENDER.hudBottom) / z + m;
+    this.cam.x = Math.max(-m, Math.min(maxX, this.cam.x));
     this.cam.y = Math.max(minY, Math.min(maxY, this.cam.y));
   }
 
@@ -282,6 +314,22 @@ export class Game {
             this.alertAt = { x: ev.x, y: ev.y, t: w.time };
           }
           break;
+        case 'aged':
+          if (ev.team === PLAYER) {
+            this.audio.play('victory');
+            this.toast(`You have reached the ${AGES[ev.age].name}! Your soldiers grow stronger.`);
+          } else this.toast(`The enemy has reached the ${AGES[ev.age].name}.`, true);
+          this.cmdKey = '-';
+          break;
+        case 'researched':
+          if (ev.team === PLAYER && ev.key !== 'age') {
+            this.audio.play('built');
+            this.toast(ev.key === 'merchant' ? 'A merchant joins your market.' : 'Guard tower ready.');
+          }
+          break;
+        case 'cantRepair':
+          if (ev.team === PLAYER) this.toast(`Repair stopped: not enough ${ev.kind}.`, true);
+          break;
         case 'housed':
           if (ev.team === PLAYER) {
             this.audio.play('error');
@@ -300,12 +348,13 @@ export class Game {
   private alertAt: { x: number; y: number; t: number } | null = null;
 
   render(ctx: CanvasRenderingContext2D): void {
-    const ghost = this.ghost();
+    const g1 = this.ghost();
+    const ghosts = g1 ? [g1] : this.wallGhosts();
     const rallyFor = this.selected.length >= 1 && this.selected[0].kind === 'building' && this.selected[0].team === PLAYER ? this.selected[0] : null;
     drawWorld(ctx, this.world, this.terrain, this.cam, this.fx, {
       selected: new Set(this.selected.map((e) => e.id)),
       hoverId: this.hoverId,
-      ghost,
+      ghosts,
       rallyFor,
       fog: !this.attract,
       time: this.world.time,
@@ -338,6 +387,24 @@ export class Game {
     return { type: this.mode.type, tx, ty, ok: canPlace(this.world, PLAYER, this.mode.type, tx, ty) === 'ok' };
   }
 
+  /** Wall placement preview: the tile under the mouse, or the whole line once a start is set. */
+  private wallGhosts(): Ghost[] {
+    if (this.mode.kind !== 'wall' || !this.mouse.onCanvas) return [];
+    const p = this.toWorld(this.mouse.x, this.mouse.y);
+    const end = { tx: Math.floor(p.x / T), ty: Math.floor(p.y / T) };
+    const start = this.mode.start ?? end;
+    const type = this.mode.type;
+    const tiles = lineTiles(start.tx, start.ty, end.tx, end.ty).slice(0, MAX_WALL);
+    const team = this.world.teams[PLAYER];
+    const cost = BUILDINGS[type].cost;
+    let budget = Math.min(...(Object.entries(cost) as [keyof typeof team, number][]).map(([k, v]) => Math.floor((team[k] as number) / v)));
+    return tiles.map((t) => {
+      const ok = canPlace(this.world, PLAYER, type, t.x, t.y) === 'ok' && budget > 0;
+      if (ok) budget--;
+      return { type, tx: t.x, ty: t.y, ok };
+    });
+  }
+
   // ---------- selection & commands ----------
 
   private mySel(): Entity[] {
@@ -351,6 +418,8 @@ export class Game {
     if (sound && list.length) this.audio.play('select');
   }
 
+  private buildPage: 0 | 1 = 0; // villager build menu: 0 economy and army, 1 defenses
+
   private commands(): Cmd[] {
     const w = this.world;
     const sel = this.mySel();
@@ -359,28 +428,53 @@ export class Game {
     if (sel.length === 0) return out;
     const vills = sel.filter((e) => e.type === 'villager');
     const soldiers = sel.filter(isSoldier);
-    const keys = ['Z', 'X', 'C', 'V'];
+    const keys = ['Z', 'X', 'C', 'V', 'B', 'N'];
+    const lockedTip = (age: number): string => `Needs the ${AGES[age].name}.`;
     if (vills.length) {
-      (['house', 'storehouse', 'barracks', 'stable'] as BuildingType[]).forEach((b, i) => {
+      const pages: BuildingType[][] = [
+        ['house', 'storehouse', 'barracks', 'stable', 'market'],
+        ['wall', 'gate', 'watchTower', 'stoneWall', 'stoneGate', 'guardTower'],
+      ];
+      pages[this.buildPage].forEach((b, i) => {
         const s = BUILDINGS[b];
+        const ageOk = team.age >= s.age;
         out.push({
           key: keys[i],
           icon: b,
           label: s.name,
-          wood: s.wood,
-          enabled: team.wood >= s.wood,
-          active: this.mode.kind === 'place' && this.mode.type === b,
-          tip: TIPS[b],
+          cost: s.cost,
+          enabled: ageOk && canAfford(w, PLAYER, s.cost),
+          locked: !ageOk,
+          active: (this.mode.kind === 'place' || this.mode.kind === 'wall') && this.mode.type === b,
+          tip: (ageOk ? '' : lockedTip(s.age) + ' ') + TIPS[b] + (s.wall && !s.gate ? ' Click a start tile, then an end tile.' : ''),
           run: () => {
-            if (team.wood < s.wood) {
+            if (!ageOk) {
               this.audio.play('error');
-              this.toast(`Not enough wood (${s.wood} needed).`);
+              this.toast(`${s.name}: ${lockedTip(s.age)}`);
               return;
             }
-            this.mode = { kind: 'place', type: b };
+            const short = shortOf(w, PLAYER, s.cost);
+            if (short) {
+              this.audio.play('error');
+              this.toast(`Not enough ${short} (${costText(s.cost)}).`);
+              return;
+            }
+            this.mode = s.wall && !s.gate ? { kind: 'wall', type: b, start: null } : { kind: 'place', type: b };
             this.audio.play('click');
           },
         });
+      });
+      out.push({
+        key: 'F',
+        icon: this.buildPage === 0 ? 'wall' : 'house',
+        label: this.buildPage === 0 ? 'Walls' : 'Build',
+        enabled: true,
+        tip: this.buildPage === 0 ? 'Walls, gates and towers.' : 'Houses, storehouses, barracks, stable and market.',
+        run: () => {
+          this.buildPage = this.buildPage === 0 ? 1 : 0;
+          this.mode = { kind: 'none' };
+          this.audio.play('click');
+        },
       });
     } else if (soldiers.length) {
       const current = soldiers.every((u) => u.formation === soldiers[0].formation) ? soldiers[0].formation : null;
@@ -438,24 +532,132 @@ export class Game {
           this.audio.play('command');
         },
       });
-    } else if (sel.length >= 1 && sel.every((b) => b.kind === 'building' && b.type === sel[0].type) && sel.some((b) => b.progress >= 1)) {
-      // one or more buildings of the same kind: each click trains one in every one of them
+    } else if (sel.length >= 1 && sel.every((b) => b.kind === 'building' && b.type === sel[0].type)) {
       const ready = sel.filter((b) => b.progress >= 1);
-      BUILDINGS[sel[0].type as BuildingType].trains.forEach((u, i) => {
-        const s = UNITS[u];
+      if (ready.length === 0) return out;
+      const type = sel[0].type as BuildingType;
+      const busy = ready.every((b) => b.research);
+      // training: one click trains one in every selected building
+      BUILDINGS[type].trains.forEach((u, i) => {
+        const st = unitStats(u, team.age);
+        const avail = team.age >= UNITS[u].age;
         out.push({
           key: keys[i],
           icon: u,
-          label: s.name,
-          food: s.food,
-          wood: s.wood,
-          enabled: team.food >= s.food && team.wood >= s.wood && ready.some((b) => b.queue.length < 5),
-          tip: TIPS[u] + (ready.length > 1 ? ` Trains one in each of your ${ready.length} selected buildings.` : ''),
-          run: () => this.trainAt(ready, u),
+          label: avail ? st.name : UNITS[u].tiers[UNITS[u].age].name,
+          cost: UNITS[u].cost,
+          enabled: avail && !busy && canAfford(w, PLAYER, UNITS[u].cost) && ready.some((b) => b.queue.length < 5),
+          locked: !avail,
+          tip: (avail ? '' : lockedTip(UNITS[u].age) + ' ') + (TIPS[u] ?? '') + (ready.length > 1 ? ` Trains one in each of your ${ready.length} selected buildings.` : ''),
+          run: () => (avail ? this.trainAt(ready, u) : (this.audio.play('error'), this.toast(lockedTip(UNITS[u].age)))),
         });
       });
+      const k0 = BUILDINGS[type].trains.length;
+      // Town Center: advance to the next age
+      if (type === 'townCenter' && team.age < 2) {
+        const next = AGES[team.age + 1];
+        const researching = w.buildings.some((b) => b.team === PLAYER && b.research?.key === 'age');
+        out.push({
+          key: keys[k0],
+          icon: team.age === 0 ? 'age-feudal' : 'age-imperial',
+          label: team.age === 0 ? 'Feudal Age' : 'Imperial Age',
+          cost: next.cost,
+          enabled: !researching && canAfford(w, PLAYER, next.cost),
+          active: researching,
+          tip: `Advance to the ${next.name} (${next.sec} s). ${team.age === 0 ? 'Unlocks Archers, the Stable, the Market, stone walls and guard towers. Soldiers get stronger.' : 'Champions, Halberdiers, Longbowmen and Knights.'}`,
+          run: () => this.research(ready[0], 'age'),
+        });
+      }
+      if (type === 'market') {
+        (['food', 'wood', 'stone'] as const).forEach((kind, i) => {
+          out.push({
+            key: keys[i],
+            icon: `buy-${kind}`,
+            label: `Buy ${kind}`,
+            cost: { gold: MARKET.buy[kind] },
+            enabled: team.gold >= MARKET.buy[kind],
+            tip: `Trade ${MARKET.buy[kind]} gold for ${MARKET.lot} ${kind}.`,
+            run: () => {
+              if (buyResource(w, PLAYER, kind)) this.audio.play('click');
+              else {
+                this.audio.play('error');
+                this.toast('Not enough gold.');
+              }
+            },
+          });
+        });
+        out.push({
+          key: 'V',
+          icon: 'merchant',
+          label: `Merchant ${team.merchants}/${MARKET.maxMerchants}`,
+          cost: MARKET.merchantCost,
+          enabled: team.merchants < MARKET.maxMerchants && !ready.some((b) => b.research) && canAfford(w, PLAYER, MARKET.merchantCost),
+          active: ready.some((b) => b.research?.key === 'merchant'),
+          tip: `Hire a merchant: +${MARKET.merchantPerSec} gold per second from trade. Up to ${MARKET.maxMerchants}.`,
+          run: () => this.research(ready[0], 'merchant'),
+        });
+      }
+      if (BUILDINGS[type].gate) {
+        const locked = ready.every((b) => b.locked);
+        out.push({
+          key: 'Z',
+          icon: locked ? 'gate-locked' : 'gate-open',
+          label: locked ? 'Unlock' : 'Lock',
+          enabled: true,
+          active: locked,
+          tip: locked ? 'Unlock: your own units can pass through again.' : 'Lock: nobody gets through, not even your own units.',
+          run: () => {
+            for (const b of ready) setGateLocked(w, b, !locked);
+            this.audio.play('command');
+          },
+        });
+      }
+      if (type === 'watchTower') {
+        out.push({
+          key: 'Z',
+          icon: 'guardTower',
+          label: 'Upgrade',
+          cost: TOWER_UPGRADE.cost,
+          locked: team.age < 1,
+          enabled: team.age >= 1 && !ready[0].research && canAfford(w, PLAYER, TOWER_UPGRADE.cost),
+          active: !!ready[0].research,
+          tip: (team.age < 1 ? lockedTip(1) + ' ' : '') + 'Turn it into a stone guard tower that shoots arrows and holds 5 troops.',
+          run: () => this.research(ready[0], 'towerUpgrade'),
+        });
+      }
+      if (BUILDINGS[type].garrison > 0) {
+        const n = ready.reduce((a, b) => a + garrisoned(w, b).length, 0);
+        out.push({
+          key: 'X',
+          icon: 'standdown',
+          label: 'Let out',
+          status: `${n}`,
+          enabled: n > 0,
+          tip: 'Everyone inside comes out. To send troops in, select them and right-click the tower.',
+          run: () => {
+            for (const b of ready) ungarrison(w, b);
+            this.audio.play('command');
+          },
+        });
+      }
     }
     return out;
+  }
+
+  private research(b: Entity, key: ResearchKey): void {
+    if (b.research && b.research.key === key) {
+      cancelResearch(this.world, b);
+      this.toast('Cancelled.');
+      this.audio.play('click');
+      return;
+    }
+    const r = startResearch(this.world, b, key);
+    if (r === 'ok') this.audio.play('click');
+    else {
+      this.audio.play('error');
+      const info = researchInfo(this.world, b, key);
+      this.toast(r === 'cost' && info ? `Not enough ${shortOf(this.world, PLAYER, info.cost)} (${costText(info.cost)}).` : r === 'busy' ? 'Already busy.' : 'Not available.');
+    }
   }
 
   private trainAt(list: Entity[], u: UnitType): void {
@@ -465,12 +667,13 @@ export class Game {
     for (const b of [...list].sort((a, c) => a.queue.length - c.queue.length)) {
       r = train(this.world, b, u);
       if (r === 'ok') any = true;
-      else if (r === 'food' || r === 'wood') break;
+      else if (r === 'cost') break;
     }
     if (any) this.audio.play('click');
     else {
       this.audio.play('error');
-      this.toast(r === 'food' ? 'Not enough food.' : r === 'wood' ? 'Not enough wood.' : r === 'queue' ? 'The queue is full.' : 'Cannot train that here.');
+      const c = UNITS[u].cost;
+      this.toast(r === 'cost' ? `Not enough ${shortOf(this.world, PLAYER, c)} (${costText(c)}).` : r === 'queue' ? 'The queue is full.' : r === 'busy' ? 'Busy researching.' : r === 'age' ? 'Not available in this age.' : 'Cannot train that here.');
     }
     this.hudT = 0;
   }
@@ -519,6 +722,10 @@ export class Game {
       const p = this.toInternal(e.clientX, e.clientY);
       const wp = this.toWorld(p.x, p.y);
       if (e.button === 0) {
+        if (this.mode.kind === 'wall') {
+          this.wallClick(wp.x, wp.y, e.shiftKey);
+          return;
+        }
         if (this.mode.kind === 'place') {
           this.tryPlace(e.shiftKey);
           return;
@@ -636,7 +843,7 @@ export class Game {
       tip.classList.add('hidden');
       return;
     }
-    const cost = [cmd.food ? `${cmd.food} food` : '', cmd.wood ? `${cmd.wood} wood` : ''].filter(Boolean).join(', ');
+    const cost = cmd.cost ? costText(cmd.cost) : '';
     tip.innerHTML = `<div class="t">${cmd.label} (${cmd.key})</div>${cost ? `<div class="dim">${cost}</div>` : ''}<div>${cmd.tip}</div>`;
     tip.classList.remove('hidden');
     const stage = $('stage').getBoundingClientRect();
@@ -653,11 +860,33 @@ export class Game {
     const builders = this.mySel().filter((u) => u.type === 'villager');
     const r = placeBuilding(this.world, PLAYER, g.type, g.tx, g.ty, builders);
     if (r === 'ok') {
-      if (!keep || this.world.teams[PLAYER].wood < BUILDINGS[g.type].wood) this.mode = { kind: 'none' };
+      if (!keep || !canAfford(this.world, PLAYER, BUILDINGS[g.type].cost)) this.mode = { kind: 'none' };
     } else {
       this.audio.play('error');
-      this.toast(r === 'wood' ? 'Not enough wood.' : r === 'unexplored' ? 'You cannot build in unexplored land.' : 'Cannot build there.');
+      const c = BUILDINGS[g.type].cost;
+      this.toast(r === 'cost' ? `Not enough ${shortOf(this.world, PLAYER, c)} (${costText(c)}).` : r === 'unexplored' ? 'You cannot build in unexplored land.' : r === 'age' ? 'Not available in this age.' : 'Cannot build there.');
     }
+  }
+
+  /** Walls: first click sets the start, second click builds the line. */
+  private wallClick(x: number, y: number, keep: boolean): void {
+    if (this.mode.kind !== 'wall') return;
+    const tile = { tx: Math.floor(x / T), ty: Math.floor(y / T) };
+    if (!this.mode.start) {
+      this.mode.start = tile;
+      this.audio.play('click');
+      return;
+    }
+    const builders = this.mySel().filter((u) => u.type === 'villager');
+    const n = placeWallLine(this.world, PLAYER, this.mode.type, this.mode.start.tx, this.mode.start.ty, tile.tx, tile.ty, builders);
+    if (n === 0) {
+      this.audio.play('error');
+      this.toast(canAfford(this.world, PLAYER, BUILDINGS[this.mode.type].cost) ? 'Cannot build a wall there.' : `Not enough ${shortOf(this.world, PLAYER, BUILDINGS[this.mode.type].cost)}.`);
+      return;
+    }
+    this.toast(`${n} wall piece${n === 1 ? '' : 's'} placed.`);
+    // keep going from the end of this piece with Shift held
+    this.mode = keep && canAfford(this.world, PLAYER, BUILDINGS[this.mode.type].cost) ? { kind: 'wall', type: this.mode.type, start: tile } : { kind: 'none' };
   }
 
   private rightClick(x: number, y: number, queue = false): void {
@@ -834,6 +1063,10 @@ export class Game {
     const t = w.teams[PLAYER];
     $('r-food').textContent = String(Math.floor(t.food));
     $('r-wood').textContent = String(Math.floor(t.wood));
+    $('r-gold').textContent = String(Math.floor(t.gold));
+    $('r-stone').textContent = String(Math.floor(t.stone));
+    const adv = w.buildings.find((b) => b.team === PLAYER && b.research?.key === 'age');
+    $('r-age').textContent = adv ? `${AGES[t.age].name} → ${Math.floor((adv.research!.t / adv.research!.sec) * 100)}%` : AGES[t.age].name;
     const pop = $('r-pop');
     pop.textContent = `${t.popUsed}/${t.popCap}`;
     pop.classList.toggle('capped', t.popUsed >= t.popCap);
@@ -851,16 +1084,16 @@ export class Game {
       box.innerHTML = '';
       this.cmds.forEach((c, i) => {
         const b = document.createElement('button');
-        b.className = `cmd${c.enabled ? '' : ' off'}${c.active ? ' on' : ''}`;
+        b.className = `cmd${c.enabled ? '' : ' off'}${c.active ? ' on' : ''}${c.locked ? ' locked' : ''}`;
         b.dataset.i = String(i);
-        b.appendChild(icon(c.icon, PLAYER, 24));
+        b.appendChild(icon(c.icon, PLAYER, 24, this.world.teams[PLAYER].age));
         const k = document.createElement('span');
         k.className = 'key';
         k.textContent = c.key;
         b.appendChild(k);
         const cost = document.createElement('span');
         cost.className = 'cost';
-        cost.textContent = c.status ? `${c.label} ${c.status}` : c.food || c.wood ? [c.food ? `${c.food}F` : '', c.wood ? `${c.wood}W` : ''].filter(Boolean).join(' ') : c.label;
+        cost.textContent = c.locked ? 'Locked' : c.status ? `${c.label} ${c.status}` : c.cost && Object.keys(c.cost).length ? shortCost(c.cost) : c.label;
         b.appendChild(cost);
         box.appendChild(b);
       });
@@ -878,31 +1111,33 @@ export class Game {
       const e = sel[0];
       const head = document.createElement('div');
       head.className = 'sel-head';
-      head.appendChild(icon(e.type, e.team === NATURE ? 0 : e.team, 32));
+      head.appendChild(icon(e.type, e.team === NATURE ? 0 : e.team, 32, e.team < 2 ? w.teams[e.team].age : 0));
       const col = document.createElement('div');
       head.appendChild(col);
       info.appendChild(head);
       const owner = e.team === ENEMY ? ' (enemy)' : '';
       if (e.kind === 'resource') {
-        const name = e.type === 'tree' ? 'Tree' : e.type === 'sheep' ? 'Sheep' : 'Berry bush';
-        col.innerHTML = `<div class="sel-name">${name}</div><div>${Math.ceil(e.amount)} ${e.type === 'tree' ? 'wood' : 'food'} left</div>`;
+        const r = RESOURCES[e.type as keyof typeof RESOURCES];
+        col.innerHTML = `<div class="sel-name">${r.name}</div><div>${Math.ceil(e.amount)} ${r.kind} left</div>`;
         return;
       }
       if (e.kind === 'unit') {
-        const s = UNITS[e.type as UnitType];
+        const s = unitStats(e.type as UnitType, w.teams[e.team].age);
         const bonus = Object.entries(s.bonus)
-          .map(([k, v]) => `+${v} vs ${UNITS[k as UnitType].name}`)
+          .map(([k, v]) => `+${Math.round(v * (s.bonusScale ?? 1))} vs ${UNITS[k as UnitType].tiers[w.teams[e.team].age].name}`)
           .join(' ');
         let task = '';
         const o = e.order;
-        if (o.type === 'gather') task = o.phase === 'drop' ? `Carrying ${Math.floor(e.carry)} ${e.carryKind ?? ''}` : `Gathering ${o.resType === 'tree' ? 'wood' : 'food'} (${Math.floor(e.carry)}/10)`;
+        if (o.type === 'gather') task = o.phase === 'drop' ? `Carrying ${Math.floor(e.carry)} ${e.carryKind ?? ''}` : `Gathering ${RESOURCES[o.resType].kind} (${Math.floor(e.carry)}/10)`;
         else if (o.type === 'build') task = 'Building';
+        else if (o.type === 'repair') task = 'Repairing';
+        else if (o.type === 'garrison') task = 'Heading into the tower';
         else if (o.type === 'attack') task = 'Fighting';
         else if (o.type === 'move') task = e.hostile ? 'Marching (hostile)' : 'Moving';
         else task = e.type === 'villager' ? '<span class="warn">Idle</span>' : e.hostile ? 'On guard (hostile)' : 'Standing down';
-        col.innerHTML = `<div class="sel-name">${s.name}${owner}</div><div>HP ${Math.ceil(e.hp)}/${e.maxHp}</div><div class="bar"><i style="width:${(e.hp / e.maxHp) * 100}%"></i></div>`;
+        col.innerHTML = `<div class="sel-name">${s.name}${owner}</div><div>HP ${Math.ceil(e.hp)}/${Math.ceil(e.maxHp)}</div><div class="bar"><i style="width:${(e.hp / e.maxHp) * 100}%"></i></div>`;
         const more = document.createElement('div');
-        more.innerHTML = `<div class="dim">Attack ${s.attack} ${bonus} ${s.rangeTiles ? `Range ${s.rangeTiles}` : ''}</div>${e.team === PLAYER ? `<div>${task}</div>` : ''}`;
+        more.innerHTML = `<div class="dim">Atk ${s.attack}${s.rangeTiles ? ` Rng ${s.rangeTiles}` : ''} Armor ${s.armor}/${s.arrowArmor} ${bonus}</div>${e.team === PLAYER ? `<div>${task}</div>` : ''}`;
         info.appendChild(more);
         return;
       }
@@ -915,6 +1150,16 @@ export class Game {
         return;
       }
       if (e.team !== PLAYER) return;
+      if (e.research) {
+        const info2 = researchInfo(w, e, e.research.key);
+        const label = e.research.key === 'age' ? info2?.name ?? 'Advancing' : e.research.key === 'merchant' ? 'Hiring a merchant' : 'Upgrading';
+        info.insertAdjacentHTML('beforeend', `<div>${label} ${Math.floor((e.research.t / e.research.sec) * 100)}%</div><div class="bar prog"><i style="width:${(e.research.t / e.research.sec) * 100}%"></i></div><div class="dim">Press its button again to cancel.</div>`);
+        return;
+      }
+      if (s.garrison) info.insertAdjacentHTML('beforeend', `<div>${garrisoned(w, e).length}/${s.garrison} inside. Archers add arrows.</div>`);
+      if (e.type === 'market') info.insertAdjacentHTML('beforeend', `<div class="dim">Trade: +${tradeIncome(w, PLAYER).toFixed(2)} gold/s. Merchants: ${w.teams[PLAYER].merchants}/${MARKET.maxMerchants}</div>`);
+      if (s.gate) info.insertAdjacentHTML('beforeend', `<div class="dim">${e.locked ? 'Locked: nobody can pass.' : 'Open for your units only.'}</div>`);
+      if (e.hp < e.maxHp) info.insertAdjacentHTML('beforeend', `<div class="dim">Right-click it with villagers to repair.</div>`);
       if (e.queue.length) {
         const q = document.createElement('div');
         q.className = 'queue';
@@ -937,7 +1182,7 @@ export class Game {
       } else if (s.trains.length) {
         info.insertAdjacentHTML('beforeend', `<div class="dim">Right-click the map to set a rally point.</div>`);
       } else if (s.dropoff) {
-        info.insertAdjacentHTML('beforeend', `<div class="dim">Villagers drop food and wood here.</div>`);
+        info.insertAdjacentHTML('beforeend', `<div class="dim">Villagers drop off resources here.</div>`);
       } else if (s.pop) {
         info.insertAdjacentHTML('beforeend', `<div class="dim">+${s.pop} population.</div>`);
       }
@@ -948,7 +1193,7 @@ export class Game {
     for (const e of sel) counts.set(e.type, (counts.get(e.type) ?? 0) + 1);
     info.insertAdjacentHTML(
       'beforeend',
-      `<div class="sel-name">${sel.length} selected: ${[...counts].map(([k, n]) => `${n} ${UNITS[k as UnitType]?.name ?? BUILDINGS[k as BuildingType]?.name ?? k}`).join(', ')}</div>`,
+      `<div class="sel-name">${sel.length} selected: ${[...counts].map(([k, n]) => `${n} ${UNITS[k as UnitType] ? unitStats(k as UnitType, w.teams[PLAYER].age).name : BUILDINGS[k as BuildingType]?.name ?? k}`).join(', ')}</div>`,
     );
     const g = document.createElement('div');
     g.className = 'group';

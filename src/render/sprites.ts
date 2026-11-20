@@ -4,9 +4,11 @@
 import * as Sakura from './sakura';
 
 export type ThemeName = 'classic' | 'sakura';
-let theme: ThemeName = 'classic';
+// Classic is kept for later but not offered for now: everything draws in Sakura Village.
+let theme: ThemeName = 'sakura';
 export function setTheme(t: ThemeName): void {
-  theme = t;
+  void t;
+  theme = 'sakura';
 }
 export function getTheme(): ThemeName {
   return theme;
@@ -288,8 +290,8 @@ function scout(px: Px, tc: TeamColors, pose: UnitPose, frame: number): void {
   }
 }
 
-export function unitSprite(type: string, team: number, pose: UnitPose, frame: number, carry: string, variant = 0): HTMLCanvasElement {
-  if (theme === 'sakura') return Sakura.unitSprite(type, team, pose, frame, carry, variant);
+export function unitSprite(type: string, team: number, pose: UnitPose, frame: number, carry: string, tier = 0): HTMLCanvasElement {
+  if (theme === 'sakura') return Sakura.unitSprite(type, team, pose, frame, carry, tier);
   const key = `u:${type}:${team}:${pose}:${frame}:${carry}`;
   const tc = TEAM[team] ?? TEAM[2];
   return make(key, 16, 16, (px) => {
@@ -521,8 +523,8 @@ function townCenter(px: Px, tc: TeamColors): void {
   px(25, 3, 4, 1, tc.mid);
 }
 
-export function buildingSprite(type: string, team: number): HTMLCanvasElement {
-  if (theme === 'sakura') return Sakura.buildingSprite(type, team);
+export function buildingSprite(type: string, team: number, variant = 0): HTMLCanvasElement {
+  if (theme === 'sakura') return Sakura.buildingSprite(type, team, variant);
   const tc = TEAM[team] ?? TEAM[2];
   const size = type === 'townCenter' ? 48 : 32;
   return make(`bld:${type}:${team}`, size, size + 8, (px) => {
@@ -547,8 +549,57 @@ export function foundationSprite(size: number): HTMLCanvasElement {
   });
 }
 
+export function mineSprite(kind: string, level: number): HTMLCanvasElement {
+  return Sakura.mineSprite(kind, level);
+}
+
 /** A 16 x 16 icon for the HUD. */
-export function iconFor(type: string, team = 0): HTMLCanvasElement {
+export function iconFor(type: string, team = 0, tier = 0): HTMLCanvasElement {
+  if (type === 'gold' || type === 'stone') return mineSprite(type, 4);
+  if (type.startsWith('age-') || type.startsWith('buy-') || type === 'merchant' || type.startsWith('gate-')) {
+    return make(`icon:${type}`, 16, 16, (px) => {
+      if (type === 'age-feudal' || type === 'age-imperial') {
+        // a scroll with the age's numeral
+        px(2, 3, 12, 10, '#f3eee2');
+        px(1, 2, 14, 2, PAL.woodLight);
+        px(1, 12, 14, 2, PAL.woodLight);
+        const ink = type === 'age-feudal' ? 2 : 3;
+        for (let i = 0; i < ink; i++) px(5 + i * 2 + (ink === 2 ? 1 : 0), 6, 1, 5, PAL.red);
+        px(4, 5, 8, 1, PAL.red);
+        px(4, 11, 8, 1, PAL.red);
+      } else if (type === 'buy-food') {
+        disc(px, 8, 9, 5, '#f07d2a');
+        px(7, 3, 2, 2, PAL.green);
+        px(6, 7, 2, 2, '#ffb36b');
+      } else if (type === 'buy-wood') {
+        px(2, 6, 12, 5, PAL.wood);
+        px(2, 6, 12, 1, PAL.woodLight);
+        disc(px, 13, 8.5, 2.5, PAL.woodLight);
+        px(12, 8, 1, 1, PAL.trunk);
+      } else if (type === 'buy-stone') {
+        disc(px, 6, 10, 4, PAL.gray);
+        disc(px, 11, 9, 3.5, PAL.silver);
+        px(5, 8, 2, 1, PAL.white);
+      } else if (type === 'merchant') {
+        px(5, 2, 5, 4, PAL.skin);
+        px(4, 1, 7, 2, PAL.yellow);
+        px(4, 6, 7, 7, PAL.teal);
+        px(10, 5, 4, 6, PAL.woodLight);
+        disc(px, 4, 12, 2.5, PAL.yellow);
+        px(3, 11, 2, 2, '#fff2b0');
+      } else {
+        px(1, 3, 3, 12, PAL.trunk);
+        px(12, 3, 3, 12, PAL.trunk);
+        px(0, 2, 16, 2, PAL.red);
+        if (type === 'gate-open') px(4, 5, 8, 10, PAL.ink);
+        else {
+          px(4, 5, 8, 10, PAL.woodLight);
+          px(7, 5, 2, 10, PAL.trunk);
+          px(6, 8, 4, 4, PAL.yellow);
+        }
+      }
+    });
+  }
   if (type === 'hostile-on' || type === 'hostile-off' || type === 'standdown') {
     return make(`icon:${type}`, 16, 16, (px) => {
       if (type === 'standdown') {
@@ -583,7 +634,7 @@ export function iconFor(type: string, team = 0): HTMLCanvasElement {
       if (type === 'form-box') px(7, 7, 2, 2, PAL.yellow);
     });
   }
-  if (type === 'villager' || type === 'swordsman' || type === 'archer' || type === 'cavalry' || type === 'scout') return unitSprite(type, team, 'idle', 0, '');
+  if (type === 'villager' || type === 'swordsman' || type === 'spearman' || type === 'archer' || type === 'cavalry' || type === 'scout') return unitSprite(type, team, 'idle', 0, '', tier);
   if (type === 'tree') return treeSprite(0);
   if (type === 'berries') return berrySprite(6);
   if (type === 'sheep') return sheepSprite(0);

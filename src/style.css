@@ -124,6 +124,18 @@ button:focus-visible {
 .sw.pop {
   background: var(--pop);
 }
+.sw.gold {
+  background: #e3b341;
+}
+.sw.stone {
+  background: #94b0c2;
+}
+#r-age {
+  color: var(--gold);
+}
+.cmd.locked {
+  opacity: 0.35;
+}
 .sw.idle {
   background: var(--gold);
 }

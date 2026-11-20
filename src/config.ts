@@ -1,10 +1,32 @@
 // Every tunable number in the game lives here. All values are placeholders
 // from the design doc and are meant to be changed during playtests.
 
-export type ResKind = 'food' | 'wood';
-export type UnitType = 'villager' | 'swordsman' | 'archer' | 'cavalry' | 'scout';
-export type BuildingType = 'townCenter' | 'storehouse' | 'house' | 'barracks' | 'stable';
-export type ResourceType = 'berries' | 'sheep' | 'tree';
+export type ResKind = 'food' | 'wood' | 'gold' | 'stone';
+export const RES_KINDS: ResKind[] = ['food', 'wood', 'gold', 'stone'];
+export type Cost = Partial<Record<ResKind, number>>;
+export type UnitType = 'villager' | 'swordsman' | 'spearman' | 'archer' | 'cavalry' | 'scout';
+export type BuildingType =
+  | 'townCenter'
+  | 'storehouse'
+  | 'house'
+  | 'barracks'
+  | 'stable'
+  | 'market'
+  | 'wall'
+  | 'gate'
+  | 'stoneWall'
+  | 'stoneGate'
+  | 'watchTower'
+  | 'guardTower';
+export type ResourceType = 'berries' | 'sheep' | 'tree' | 'gold' | 'stone';
+
+/** 0 = Dark Age, 1 = Feudal Age, 2 = Imperial Age. */
+export type Age = 0 | 1 | 2;
+export const AGES: { name: string; cost: Cost; sec: number }[] = [
+  { name: 'Dark Age', cost: {}, sec: 0 },
+  { name: 'Feudal Age', cost: { food: 350, wood: 150 }, sec: 60 },
+  { name: 'Imperial Age', cost: { food: 600, wood: 300, gold: 200 }, sec: 90 },
+];
 
 export const SIM = {
   tickHz: 30,
@@ -23,14 +45,17 @@ export const RENDER: { width: number; height: number; tileSize: number; hudTop: 
 };
 
 export const MAP = {
-  widthTiles: 64,
-  heightTiles: 64,
+  widthTiles: 96,
+  heightTiles: 96,
+  cameraMargin: 32, // px the camera may scroll past the map edge
 } as const;
 
 export const ECONOMY = {
   carryCapacity: 10,
   startingFood: 100,
   startingWood: 50,
+  startingGold: 0,
+  startingStone: 0,
   startingVillagers: 3,
   startingScouts: 1, // a fast Scout for exploring
   maxPop: 100,
@@ -38,14 +63,17 @@ export const ECONOMY = {
 } as const;
 
 export const RESOURCES: Record<ResourceType, { name: string; kind: ResKind; gatherPerSec: number; amount: number }> = {
-  berries: { name: 'Berry bush', kind: 'food', gatherPerSec: 0.6, amount: 200 },
+  berries: { name: 'Persimmon tree', kind: 'food', gatherPerSec: 0.6, amount: 200 },
   sheep: { name: 'Sheep', kind: 'food', gatherPerSec: 0.8, amount: 100 },
   tree: { name: 'Tree', kind: 'wood', gatherPerSec: 0.6, amount: 100 },
+  gold: { name: 'Gold mine', kind: 'gold', gatherPerSec: 0.45, amount: 400 },
+  stone: { name: 'Stone quarry', kind: 'stone', gatherPerSec: 0.45, amount: 350 },
 };
 
 export interface BuildingStats {
   name: string;
-  wood: number;
+  cost: Cost;
+  age: Age; // first age it can be built in
   buildSec: number;
   size: number; // tiles per side
   hp: number;
@@ -53,41 +81,195 @@ export interface BuildingStats {
   pop: number; // population cap it adds once finished
   dropoff: boolean;
   trains: UnitType[];
-  attack: number; // 0 = does not shoot
+  attack: number; // per arrow; 0 = does not shoot
   attackSec: number;
   rangeTiles: number;
+  garrison: number; // troops it can hold
+  wall?: boolean; // one-tile wall piece
+  gate?: boolean; // lets its own side through unless locked
 }
 
+const B = (o: Partial<BuildingStats> & Pick<BuildingStats, 'name' | 'cost' | 'buildSec' | 'size' | 'hp'>): BuildingStats => ({
+  age: 0,
+  sight: 4,
+  pop: 0,
+  dropoff: false,
+  trains: [],
+  attack: 0,
+  attackSec: 0,
+  rangeTiles: 0,
+  garrison: 0,
+  ...o,
+});
+
 export const BUILDINGS: Record<BuildingType, BuildingStats> = {
-  townCenter: { name: 'Town Center', wood: 0, buildSec: 0, size: 3, hp: 600, sight: 8, pop: 10, dropoff: true, trains: ['villager'], attack: 4, attackSec: 1.5, rangeTiles: 6 },
-  storehouse: { name: 'Storehouse', wood: 60, buildSec: 20, size: 2, hp: 200, sight: 5, pop: 0, dropoff: true, trains: [], attack: 0, attackSec: 0, rangeTiles: 0 },
-  house: { name: 'House', wood: 30, buildSec: 15, size: 2, hp: 150, sight: 4, pop: 5, dropoff: false, trains: [], attack: 0, attackSec: 0, rangeTiles: 0 },
-  barracks: { name: 'Barracks', wood: 150, buildSec: 40, size: 2, hp: 350, sight: 5, pop: 0, dropoff: false, trains: ['swordsman', 'archer'], attack: 0, attackSec: 0, rangeTiles: 0 },
-  stable: { name: 'Stable', wood: 125, buildSec: 35, size: 2, hp: 300, sight: 5, pop: 0, dropoff: false, trains: ['cavalry', 'scout'], attack: 0, attackSec: 0, rangeTiles: 0 },
+  townCenter: B({ name: 'Town Center', cost: {}, buildSec: 0, size: 3, hp: 600, sight: 8, pop: 10, dropoff: true, trains: ['villager'], attack: 4, attackSec: 1.5, rangeTiles: 6 }),
+  storehouse: B({ name: 'Storehouse', cost: { wood: 60 }, buildSec: 20, size: 2, hp: 200, sight: 5, dropoff: true }),
+  house: B({ name: 'House', cost: { wood: 30 }, buildSec: 15, size: 2, hp: 150, pop: 5 }),
+  barracks: B({ name: 'Barracks', cost: { wood: 150 }, buildSec: 40, size: 2, hp: 350, sight: 5, trains: ['swordsman', 'spearman', 'archer'] }),
+  stable: B({ name: 'Stable', cost: { wood: 125 }, age: 1, buildSec: 35, size: 2, hp: 300, sight: 5, trains: ['cavalry', 'scout'] }),
+  market: B({ name: 'Market', cost: { wood: 175 }, age: 1, buildSec: 45, size: 2, hp: 300, sight: 5 }),
+  wall: B({ name: 'Wooden wall', cost: { wood: 4 }, buildSec: 4, size: 1, hp: 150, sight: 2, wall: true }),
+  gate: B({ name: 'Wooden gate', cost: { wood: 25 }, buildSec: 10, size: 1, hp: 220, sight: 3, wall: true, gate: true }),
+  stoneWall: B({ name: 'Stone wall', cost: { stone: 6 }, age: 1, buildSec: 8, size: 1, hp: 700, sight: 2, wall: true }),
+  stoneGate: B({ name: 'Stone gate', cost: { stone: 30 }, age: 1, buildSec: 15, size: 1, hp: 900, sight: 3, wall: true, gate: true }),
+  watchTower: B({ name: 'Watch tower', cost: { wood: 60 }, buildSec: 25, size: 1, hp: 250, sight: 11 }),
+  guardTower: B({ name: 'Guard tower', cost: { wood: 50, stone: 125 }, age: 1, buildSec: 45, size: 1, hp: 700, sight: 10, attack: 5, attackSec: 1.5, rangeTiles: 7, garrison: 5 }),
 };
 
-export interface UnitStats {
+/** Watch tower to guard tower, done at the tower. */
+export const TOWER_UPGRADE = { cost: { wood: 40, stone: 100 } as Cost, sec: 30 };
+
+export const MARKET = {
+  buy: { food: 60, wood: 60, stone: 80 } as Record<'food' | 'wood' | 'stone', number>, // gold per 100
+  lot: 100,
+  tradePerSec: 0.15, // gold each market earns on its own
+  merchantPerSec: 0.15, // extra gold per merchant
+  merchantCost: { food: 40, wood: 40, gold: 40 } as Cost,
+  merchantSec: 20,
+  maxMerchants: 5,
+};
+
+/** Repairing a building from nothing to full costs this share of its price. */
+export const REPAIR = { costShare: 0.25, rateShare: 0.5 };
+
+export interface Tier {
   name: string;
-  food: number;
-  wood: number;
   hp: number;
   attack: number;
   attackSec: number;
+  armor: number; // reduces melee damage
+  arrowArmor: number; // reduces arrow damage
+  rangeTiles?: number;
+  bonusScale?: number; // multiplies the unit's bonus damage
+}
+
+export interface UnitStats {
+  name: string; // the unit line, e.g. 'Sword line'
+  cost: Cost;
+  age: Age; // first age it can be trained in
   rangeTiles: number; // 0 = melee
   speed: number; // tiles per second
   trainSec: number;
   sight: number; // tiles
   bonus: Partial<Record<UnitType, number>>; // extra damage vs these units
   vsBuildings: number; // damage multiplier against buildings
+  tiers: [Tier, Tier, Tier]; // stats in the Dark, Feudal and Imperial Ages
 }
 
+const same = (t: Tier): [Tier, Tier, Tier] => [t, t, t];
+
 export const UNITS: Record<UnitType, UnitStats> = {
-  villager: { name: 'Villager', food: 50, wood: 0, hp: 25, attack: 2, attackSec: 1.5, rangeTiles: 0, speed: 1.6, trainSec: 10, sight: 5, bonus: {}, vsBuildings: 1 },
-  swordsman: { name: 'Swordsman', food: 50, wood: 25, hp: 60, attack: 6, attackSec: 1, rangeTiles: 0, speed: 1.4, trainSec: 15, sight: 5, bonus: { cavalry: 4 }, vsBuildings: 1.5 },
-  archer: { name: 'Archer', food: 40, wood: 40, hp: 30, attack: 4, attackSec: 1, rangeTiles: 5, speed: 1.6, trainSec: 15, sight: 7, bonus: { swordsman: 4 }, vsBuildings: 0.5 },
-  scout: { name: 'Scout', food: 60, wood: 0, hp: 45, attack: 2, attackSec: 1.2, rangeTiles: 3, speed: 3.0, trainSec: 15, sight: 9, bonus: {}, vsBuildings: 0.3 },
-  cavalry: { name: 'Cavalry', food: 80, wood: 30, hp: 70, attack: 5, attackSec: 1, rangeTiles: 0, speed: 2.6, trainSec: 20, sight: 6, bonus: { archer: 4 }, vsBuildings: 1 },
+  villager: { name: 'Villager', cost: { food: 50 }, age: 0, rangeTiles: 0, speed: 1.6, trainSec: 10, sight: 5, bonus: {}, vsBuildings: 1, tiers: same({ name: 'Villager', hp: 25, attack: 2, attackSec: 1.5, armor: 0, arrowArmor: 0 }) },
+  swordsman: {
+    name: 'Sword line',
+    cost: { food: 50, wood: 20 },
+    age: 0,
+    rangeTiles: 0,
+    speed: 1.4,
+    trainSec: 15,
+    sight: 5,
+    bonus: { spearman: 2 },
+    vsBuildings: 1.5,
+    tiers: [
+      { name: 'Militia', hp: 40, attack: 4, attackSec: 1.2, armor: 0, arrowArmor: 0 },
+      { name: 'Man-at-Arms', hp: 55, attack: 6, attackSec: 1.0, armor: 1, arrowArmor: 1 },
+      { name: 'Champion', hp: 75, attack: 8, attackSec: 0.85, armor: 2, arrowArmor: 4 },
+    ],
+  },
+  spearman: {
+    name: 'Spear line',
+    cost: { food: 35, wood: 25 },
+    age: 0,
+    rangeTiles: 0,
+    speed: 1.5,
+    trainSec: 14,
+    sight: 5,
+    bonus: { cavalry: 10, scout: 7 },
+    vsBuildings: 1,
+    tiers: [
+      { name: 'Spearman', hp: 38, attack: 3, attackSec: 1.2, armor: 0, arrowArmor: 0, bonusScale: 0.8 },
+      { name: 'Pikeman', hp: 50, attack: 4, attackSec: 1.1, armor: 0, arrowArmor: 1 },
+      { name: 'Halberdier', hp: 62, attack: 5, attackSec: 1.0, armor: 1, arrowArmor: 2, bonusScale: 1.25 },
+    ],
+  },
+  archer: {
+    name: 'Archer line',
+    cost: { food: 30, wood: 40, gold: 10 },
+    age: 1,
+    rangeTiles: 5,
+    speed: 1.6,
+    trainSec: 15,
+    sight: 7,
+    bonus: {},
+    vsBuildings: 0.5,
+    tiers: [
+      { name: 'Archer', hp: 30, attack: 6, attackSec: 1.1, armor: 0, arrowArmor: 0 },
+      { name: 'Archer', hp: 30, attack: 6, attackSec: 1.1, armor: 0, arrowArmor: 0 },
+      { name: 'Longbowman', hp: 35, attack: 7, attackSec: 0.95, armor: 0, arrowArmor: 1, rangeTiles: 6 },
+    ],
+  },
+  cavalry: {
+    name: 'Cavalry line',
+    cost: { food: 80, wood: 20, gold: 20 },
+    age: 1,
+    rangeTiles: 0,
+    speed: 2.6,
+    trainSec: 20,
+    sight: 6,
+    bonus: { archer: 2 },
+    vsBuildings: 1,
+    tiers: [
+      { name: 'Cavalry', hp: 75, attack: 6, attackSec: 1.0, armor: 1, arrowArmor: 1 },
+      { name: 'Cavalry', hp: 75, attack: 6, attackSec: 1.0, armor: 1, arrowArmor: 1 },
+      { name: 'Knight', hp: 100, attack: 8, attackSec: 0.95, armor: 2, arrowArmor: 4 },
+    ],
+  },
+  scout: {
+    name: 'Scout',
+    cost: { food: 60 },
+    age: 1,
+    rangeTiles: 0,
+    speed: 3.0,
+    trainSec: 15,
+    sight: 9,
+    bonus: { archer: 2 },
+    vsBuildings: 0.3,
+    tiers: [
+      { name: 'Scout', hp: 40, attack: 3, attackSec: 1.1, armor: 0, arrowArmor: 0 },
+      { name: 'Scout', hp: 50, attack: 4, attackSec: 1.0, armor: 0, arrowArmor: 1 },
+      { name: 'Scout', hp: 60, attack: 5, attackSec: 1.0, armor: 1, arrowArmor: 1 },
+    ],
+  },
 };
+
+/** Archers fighting an enemy right next to them do this share of their damage. */
+export const CLOSE_QUARTERS = { tiles: 1.2, share: 0.5 };
+
+/** A unit's stats in a given age. */
+export function unitStats(type: UnitType, age: Age): UnitStats & Tier {
+  const u = UNITS[type];
+  const t = u.tiers[Math.max(age, u.age)];
+  return { ...u, ...t, rangeTiles: t.rangeTiles ?? u.rangeTiles };
+}
+
+/** Damage one hit does: bonus, close-quarters penalty for archers, then armor (at least 1). */
+export function hitDamage(att: UnitType, attAge: Age, def: UnitType, defAge: Age, closeQuarters: boolean): number {
+  const a = unitStats(att, attAge);
+  const d = unitStats(def, defAge);
+  const ranged = a.rangeTiles > 0;
+  let dmg = a.attack + (a.bonus[def] ?? 0) * (a.bonusScale ?? 1);
+  if (ranged && closeQuarters) dmg *= CLOSE_QUARTERS.share;
+  dmg -= ranged ? d.arrowArmor : d.armor;
+  return Math.max(1, dmg);
+}
+
+export function costText(c: Cost): string {
+  return (Object.entries(c) as [ResKind, number][])
+    .filter(([, v]) => v > 0)
+    .map(([k, v]) => `${v} ${k}`)
+    .join(', ');
+}
 
 export type DifficultyKey = 'easy' | 'normal' | 'hard';
 export interface Difficulty {
@@ -108,18 +290,21 @@ export const DIFFICULTY: Record<DifficultyKey, Difficulty> = {
 export type OpeningKey = 'boom' | 'rush' | 'archers' | 'horseRaid';
 export interface Opening {
   name: string;
-  foodShare: number; // share of villagers on food
+  foodShare: number; // share of food+wood villagers on food
   barracksAtVillagers: number;
+  feudalAtVillagers: number; // starts advancing at this many villagers
+  imperialAtVillagers: number;
   earlyVillagerCap: number | null; // villager limit until the first attack
   maxStorehouses: number;
   mix: Partial<Record<UnitType, number>>; // army weights before the first attack
   mixAfter: Partial<Record<UnitType, number>>; // and after it
   firstAttackSize: number;
   attackGrow: number;
+  towers: number; // guard towers it builds once in the Feudal Age
 }
 export const OPENINGS: Record<OpeningKey, Opening> = {
-  boom: { name: 'Boom', foodShare: 0.55, barracksAtVillagers: 18, earlyVillagerCap: null, maxStorehouses: 3, mix: { swordsman: 2, archer: 2, cavalry: 1 }, mixAfter: { swordsman: 2, archer: 2, cavalry: 1 }, firstAttackSize: 12, attackGrow: 3 },
-  rush: { name: 'Rush', foodShare: 0.6, barracksAtVillagers: 7, earlyVillagerCap: 10, maxStorehouses: 1, mix: { swordsman: 1 }, mixAfter: { swordsman: 2, archer: 1 }, firstAttackSize: 4, attackGrow: 2 },
-  archers: { name: 'Archer line', foodShare: 0.5, barracksAtVillagers: 9, earlyVillagerCap: null, maxStorehouses: 2, mix: { archer: 3, swordsman: 1 }, mixAfter: { archer: 2, swordsman: 1, cavalry: 1 }, firstAttackSize: 7, attackGrow: 3 },
-  horseRaid: { name: 'Horse raid', foodShare: 0.65, barracksAtVillagers: 9, earlyVillagerCap: null, maxStorehouses: 2, mix: { cavalry: 1 }, mixAfter: { cavalry: 1, swordsman: 1, archer: 1 }, firstAttackSize: 4, attackGrow: 2 },
+  boom: { name: 'Boom', foodShare: 0.55, barracksAtVillagers: 18, feudalAtVillagers: 16, imperialAtVillagers: 26, earlyVillagerCap: null, maxStorehouses: 3, mix: { swordsman: 2, spearman: 1, archer: 2, cavalry: 1 }, mixAfter: { swordsman: 2, spearman: 1, archer: 2, cavalry: 2 }, firstAttackSize: 12, attackGrow: 3, towers: 2 },
+  rush: { name: 'Rush', foodShare: 0.6, barracksAtVillagers: 7, feudalAtVillagers: 13, imperialAtVillagers: 24, earlyVillagerCap: 10, maxStorehouses: 1, mix: { swordsman: 2, spearman: 1 }, mixAfter: { swordsman: 2, spearman: 1, archer: 1 }, firstAttackSize: 4, attackGrow: 2, towers: 0 },
+  archers: { name: 'Archer line', foodShare: 0.5, barracksAtVillagers: 9, feudalAtVillagers: 11, imperialAtVillagers: 24, earlyVillagerCap: null, maxStorehouses: 2, mix: { archer: 3, spearman: 1 }, mixAfter: { archer: 2, swordsman: 1, cavalry: 1 }, firstAttackSize: 7, attackGrow: 3, towers: 1 },
+  horseRaid: { name: 'Horse raid', foodShare: 0.65, barracksAtVillagers: 9, feudalAtVillagers: 11, imperialAtVillagers: 24, earlyVillagerCap: null, maxStorehouses: 2, mix: { cavalry: 1 }, mixAfter: { cavalry: 2, spearman: 1, archer: 1 }, firstAttackSize: 4, attackGrow: 2, towers: 0 },
 };

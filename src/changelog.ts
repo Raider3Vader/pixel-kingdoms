@@ -9,6 +9,24 @@ export interface ChangelogEntry {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    version: '0.7',
+    date: '2026-11-20',
+    title: 'Ages, gold and stone, walls and towers',
+    items: [
+      'Three ages: Dark, Feudal and Imperial. Advance at the Town Center (Feudal: 350 food, 150 wood; Imperial: 600 food, 300 wood, 200 gold).',
+      'Soldiers start weak and upgrade every age, with new armor to match: Militia, Man-at-Arms, Champion; Spearman, Pikeman, Halberdier; Archer, Longbowman; Cavalry, Knight.',
+      'New spear line, deadly against horses. Archers arrive in the Feudal Age, along with the Stable and Market.',
+      'Armor now matters: heavy armor shrugs off arrows, and archers do half damage up close.',
+      'The Scout is now a fast rider with a sword.',
+      'Gold and stone to mine. The Market sells food, wood and stone for gold, earns gold from trade, and hires merchants for more.',
+      'Wooden walls and gates from the start, stone ones in the Feudal Age. Gates let only your side through, and can be locked.',
+      'Watch towers see far. Guard towers shoot arrows and hold 5 troops; each archer inside adds an arrow.',
+      'Villagers repair damaged buildings for a share of the cost.',
+      'A bigger map (96 by 96) with more room between trees, and the camera can scroll a little past the edge.',
+      'The Classic look is put away for now; Sakura Village is the only theme.',
+    ],
+  },
+  {
     version: '0.6',
     date: '2026-11-20',
     title: 'Title screen, changelog and Hostile',

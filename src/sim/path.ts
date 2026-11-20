@@ -8,7 +8,14 @@ export interface Pt {
 export interface Grid {
   w: number;
   h: number;
-  blocked: Uint8Array; // 0 = walkable
+  blocked: Uint8Array; // 0 = walkable; 4 + team = an open gate that side may use
+}
+
+/** Gate codes in the blocked grid: an unlocked gate of `team` is 4 + team. */
+export const OPEN_GATE = 4;
+
+function walkable(v: number, team: number): boolean {
+  return v === 0 || (team >= 0 && v === OPEN_GATE + team);
 }
 
 let gScore = new Float32Array(0);
@@ -95,7 +102,8 @@ export function findPath(
   isGoal: (x: number, y: number) => boolean,
   hx: number,
   hy: number,
-  maxNodes = 5000,
+  maxNodes = 12000,
+  team = -1,
 ): Pt[] | null {
   const { w, h, blocked } = grid;
   const n = w * h;
@@ -142,9 +150,9 @@ export function findPath(
       const ny = cy + dy;
       if (nx < 0 || ny < 0 || nx >= w || ny >= h) continue;
       const ni = ny * w + nx;
-      if (blocked[ni] && !isGoal(nx, ny)) continue;
+      if (!walkable(blocked[ni], team) && !isGoal(nx, ny)) continue;
       if (dx !== 0 && dy !== 0) {
-        if (blocked[cy * w + nx] || blocked[ny * w + cx]) continue;
+        if (!walkable(blocked[cy * w + nx], team) || !walkable(blocked[ny * w + cx], team)) continue;
       }
       if (closed[ni] === curStamp) continue;
       const ng = g + cost;
@@ -160,7 +168,7 @@ export function findPath(
 }
 
 /** Nearest walkable tile to (x, y), searching outward in rings. */
-export function nearestFree(grid: Grid, x: number, y: number, maxR = 12): Pt | null {
+export function nearestFree(grid: Grid, x: number, y: number, maxR = 12, team = -1): Pt | null {
   const { w, h, blocked } = grid;
   for (let r = 0; r <= maxR; r++) {
     let best: Pt | null = null;
@@ -171,7 +179,7 @@ export function nearestFree(grid: Grid, x: number, y: number, maxR = 12): Pt | n
         const nx = x + dx;
         const ny = y + dy;
         if (nx < 0 || ny < 0 || nx >= w || ny >= h) continue;
-        if (blocked[ny * w + nx]) continue;
+        if (!walkable(blocked[ny * w + nx], team)) continue;
         const d = dx * dx + dy * dy;
         if (d < bestD) {
           bestD = d;

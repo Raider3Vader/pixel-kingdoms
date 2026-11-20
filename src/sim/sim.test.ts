@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { SIM, UNITS, type UnitType } from '../config';
+import { AGES, BUILDINGS, ECONOMY, SIM, UNITS, hitDamage, type Age, type UnitType } from '../config';
 import { createBot, updateBot } from './bot';
 import { createMatch } from './map';
 import { findPath } from './path';
@@ -9,7 +9,12 @@ import {
   T,
   World,
   orderAttack,
+  buyResource,
   orderFormation,
+  orderRepair,
+  setGateLocked,
+  setOrder,
+  startResearch,
   orderGather,
   orderMove,
   placeBuilding,
@@ -89,10 +94,12 @@ describe('economy', () => {
   });
 });
 
-describe('counter triangle', () => {
-  /** Five of `a` against five of `b`, starting 6 tiles apart. Returns the winner's type. */
-  function duel(a: UnitType, b: UnitType): UnitType {
+describe('combat', () => {
+  /** Five of `a` against five of `b`, starting 6 tiles apart, in the given ages. Returns the winner's type. */
+  function duel(a: UnitType, b: UnitType, ageA: Age = 1, ageB: Age = 1): UnitType {
     const w = testWorld();
+    w.teams[PLAYER].age = ageA;
+    w.teams[ENEMY].age = ageB;
     const as = [];
     const bs = [];
     for (let i = 0; i < 5; i++) {
@@ -103,12 +110,12 @@ describe('counter triangle', () => {
       orderAttack(w, [as[i]], bs[i]);
       orderAttack(w, [bs[i]], as[i]);
     }
-    run(w, 90, () => {
-      // keep everyone fighting
-      for (const u of w.units) if (u.order.type === 'idle') {
-        const foe = w.units.find((o) => o.team !== u.team && !o.dead);
-        if (foe) orderAttack(w, [u], foe);
-      }
+    run(w, 120, () => {
+      for (const u of w.units)
+        if (u.order.type === 'idle') {
+          const foe = w.units.find((o) => o.team !== u.team && !o.dead);
+          if (foe) orderAttack(w, [u], foe);
+        }
     });
     const aLeft = teamUnits(w, PLAYER).length;
     const bLeft = teamUnits(w, ENEMY).length;
@@ -116,9 +123,90 @@ describe('counter triangle', () => {
     return aLeft > 0 ? a : b;
   }
 
-  it('Archers beat Swordsmen', () => expect(duel('archer', 'swordsman')).toBe('archer'));
-  it('Cavalry beats Archers', () => expect(duel('cavalry', 'archer')).toBe('cavalry'));
-  it('Swordsmen beat Cavalry', () => expect(duel('swordsman', 'cavalry')).toBe('swordsman'));
+  it('Spearmen beat Cavalry', () => expect(duel('spearman', 'cavalry')).toBe('spearman'));
+  it('Cavalry beat Swordsmen of the same age', () => expect(duel('cavalry', 'swordsman')).toBe('cavalry'));
+  it('Cavalry beat Archers', () => expect(duel('cavalry', 'archer')).toBe('cavalry'));
+  it('Swordsmen beat Spearmen', () => expect(duel('swordsman', 'spearman')).toBe('swordsman'));
+  it('Feudal Archers beat Dark Age Militia', () => expect(duel('archer', 'swordsman', 1, 0)).toBe('archer'));
+  it('Imperial Champions beat Feudal Militia-line', () => expect(duel('swordsman', 'swordsman', 2, 1)).toBe('swordsman'));
+
+  it('armor soaks up arrows, and archers do half damage up close', () => {
+    expect(hitDamage('archer', 1, 'swordsman', 0, false)).toBe(6); // Militia: no armor
+    expect(hitDamage('archer', 2, 'swordsman', 2, false)).toBe(3); // Champion: heavy armor
+    expect(hitDamage('archer', 1, 'spearman', 0, true)).toBe(3); // close quarters
+    expect(hitDamage('spearman', 1, 'cavalry', 1, false)).toBeGreaterThan(10); // spears vs horses
+  });
+
+  it('advancing an age upgrades existing soldiers', () => {
+    const w = testWorld();
+    const m = spawnUnit(w, 'swordsman', PLAYER, 20 * T, 20 * T);
+    expect(m.maxHp).toBe(UNITS.swordsman.tiers[0].hp);
+    w.teams[PLAYER].food = 1000;
+    w.teams[PLAYER].wood = 1000;
+    const tc = w.buildings.find((b) => b.team === PLAYER && b.type === 'townCenter')!;
+    expect(startResearch(w, tc, 'age')).toBe('ok');
+    run(w, AGES[1].sec + 1);
+    expect(w.teams[PLAYER].age).toBe(1);
+    expect(m.maxHp).toBe(UNITS.swordsman.tiers[1].hp);
+  });
+});
+
+describe('economy extras', () => {
+  it('villagers mine gold and stone', () => {
+    const w = testWorld();
+    const g = spawnResource(w, 'gold', 9, 3)!;
+    const v = spawnUnit(w, 'villager', PLAYER, 7 * T, 3 * T);
+    orderGather(w, [v], g);
+    run(w, 60);
+    expect(w.teams[PLAYER].gold).toBeGreaterThan(0);
+  });
+
+  it('a market trades for gold, sells resources and hires merchants', () => {
+    const w = testWorld();
+    w.teams[PLAYER].age = 1;
+    spawnBuilding(w, 'market', PLAYER, 20, 20, true);
+    w.teams[PLAYER].gold = 100;
+    expect(buyResource(w, PLAYER, 'wood')).toBe(true);
+    expect(w.teams[PLAYER].wood).toBe(ECONOMY.startingWood + 100);
+    const g0 = w.teams[PLAYER].gold;
+    run(w, 20);
+    expect(w.teams[PLAYER].gold).toBeGreaterThan(g0 + 2);
+  });
+
+  it('a locked gate stops your own units; an open one lets only your side through', () => {
+    const w = testWorld();
+    const gate = spawnBuilding(w, 'gate', PLAYER, 30, 30, true);
+    expect(w.isBlocked(30, 30, PLAYER)).toBe(false);
+    expect(w.isBlocked(30, 30, ENEMY)).toBe(true);
+    setGateLocked(w, gate, true);
+    expect(w.isBlocked(30, 30, PLAYER)).toBe(true);
+  });
+
+  it('archers inside a guard tower add arrows', () => {
+    const w = testWorld();
+    w.teams[PLAYER].age = 1;
+    const tower = spawnBuilding(w, 'guardTower', PLAYER, 30, 30, true);
+    const archers = [0, 1, 2].map((i) => spawnUnit(w, 'archer', PLAYER, (28 + i) * T, 32 * T));
+    for (const a of archers) setOrder(a, { type: 'garrison', target: tower.id });
+    run(w, 8);
+    expect(archers.every((a) => a.inside === tower.id)).toBe(true);
+    const foe = spawnUnit(w, 'villager', ENEMY, 33 * T, 31 * T);
+    foe.maxHp = foe.hp = 500;
+    run(w, 1.6);
+    expect(foe.hp).toBeLessThanOrEqual(500 - 4 * BUILDINGS.guardTower.attack + 1);
+  });
+
+  it('villagers repair damaged buildings and it costs resources', () => {
+    const w = testWorld();
+    const house = spawnBuilding(w, 'house', PLAYER, 20, 20, true);
+    house.hp = 30;
+    const v = spawnUnit(w, 'villager', PLAYER, 19 * T, 21 * T);
+    const wood0 = w.teams[PLAYER].wood;
+    orderRepair(w, [v], house);
+    run(w, 40);
+    expect(house.hp).toBe(house.maxHp);
+    expect(w.teams[PLAYER].wood).toBeLessThan(wood0);
+  });
 });
 
 describe('map', () => {
@@ -238,7 +326,7 @@ describe('stable', () => {
   it('a Horse raid builds a Stable and trains cavalry', () => {
     const { world: w } = createMatch(6);
     const bot = createBot(w, ENEMY, 'normal', 'horseRaid');
-    run(w, 9 * 60, () => updateBot(w, bot, DT));
+    run(w, 15 * 60, () => updateBot(w, bot, DT));
     expect(w.buildings.some((b) => b.team === ENEMY && b.type === 'stable')).toBe(true);
     expect(w.units.some((u) => u.team === ENEMY && u.type === 'cavalry') || w.teams[ENEMY].stats.trained > 20).toBe(true);
   });
