@@ -15,6 +15,8 @@ export const CHANGELOG: ChangelogEntry[] = [
     items: [
       'Each match picks one of five river layouts: winding, meandering (no bridge in the middle), twin streams with land between them, a central lake to go around, or a wide river with shallow fords instead of bridges.',
       'Fords are walkable shallow water with stepping stones.',
+      'Twin streams come up most often (about 4 matches in 10).',
+      'Removed the leftover Theme option from the menu; Sakura Village is the only look for now.',
     ],
   },
   {

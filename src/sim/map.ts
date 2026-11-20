@@ -114,7 +114,10 @@ export function createMatch(seed: number, opts: { river?: RiverKind } = {}): Set
   // Every layout is symmetric under the map's 180-degree mirror, so both sides are equal.
   const C = N / 2;
   const kinds = Object.keys(RIVERS) as RiverKind[];
-  const kind: RiverKind = opts.river ?? kinds[Math.floor(rand() * kinds.length)];
+  // twin streams come up about 40% of the time; the other layouts share the rest
+  const roll = rand();
+  const others = kinds.filter((k) => k !== 'twin');
+  const kind: RiverKind = opts.river ?? (roll < 0.4 ? 'twin' : others[Math.floor(((roll - 0.4) / 0.6) * others.length) % others.length]);
   const R = RIVERS[kind];
   w.river = kind;
   const riverAt = (x: number, y: number): { water: boolean; bridge: boolean; ford: boolean; near: boolean; off: number; s: number } => {
