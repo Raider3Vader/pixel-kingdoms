@@ -419,25 +419,33 @@ function guardTower(px: Px, team: number): void {
   nobori(px, 0, 24, 20, t);
 }
 
-/** Rice paddy (2x2 tiles, drawn flat on the ground); `level` 0-4 is how much rice is left. */
+/** Rice field (2x2 tiles, drawn flat on the ground): golden rice and a scarecrow.
+ *  `level` 0-4 is how much rice is left; harvested straw bundles pile up as it empties. */
 export function farmSprite(level: number, team: number): HTMLCanvasElement {
   return make(`farm:${level}:${team}`, 32, 32, (px) => {
-    px(0, 0, 32, 32, '#6b4a2e'); // earth banks
-    px(1, 1, 30, 30, '#4f7f9a'); // shallow water
-    px(1, 1, 30, 1, '#3a6680');
-    px(15, 1, 2, 30, '#6b4a2e'); // the raised path between plots
-    px(1, 15, 30, 2, '#6b4a2e');
-    for (let y = 3; y < 30; y += 4)
-      for (let x = 3; x < 30; x += 3) {
-        if (x === 15 || x === 16 || y === 15) continue;
-        const ripe = level <= 1 ? '#c9b25a' : '#5aa34a';
-        if ((x + y) % 7 < level + 2) {
-          px(x, y, 1, 2, ripe);
-          px(x + 1, y - 1, 1, 1, level >= 3 ? '#7fc45a' : ripe);
-        }
+    px(0, 0, 32, 32, '#6b4a2e');
+    px(1, 1, 30, 30, '#8a6a3a');
+    for (let y = 3; y < 31; y += 3) {
+      for (let x = 2; x < 30; x += 2) {
+        if ((x + y * 2) % 9 >= level * 2 + 1) continue;
+        if (x > 19 && x < 29 && y < 19) continue; // room for the scarecrow
+        const sway = (x + y) % 2;
+        px(x, y - 2, 1, 3, level <= 1 ? '#a8843f' : '#d8b84a');
+        px(x + sway, y - 3, 1, 1, '#f0d48c');
       }
-    px(28, 2, 2, 2, TEAMS[team].m); // a little team marker post
-    px(29, 4, 1, 3, JP.woodD);
+    }
+    for (let i = 0; i < 4 - level; i++) {
+      px(3 + i * 4, 26, 3, 4, JP.straw);
+      px(3 + i * 4, 27, 3, 1, JP.strawD);
+    }
+    // scarecrow (kakashi) in a straw hat with a team-colored scarf
+    px(24, 6, 1, 12, JP.woodD);
+    px(20, 10, 9, 1, JP.woodD);
+    px(22, 9, 5, 5, TEAMS[team].m);
+    px(22, 9, 5, 1, TEAMS[team].l);
+    px(23, 6, 3, 3, JP.skin);
+    px(21, 5, 7, 1, JP.straw);
+    px(22, 4, 5, 1, JP.strawD);
   }, false);
 }
 

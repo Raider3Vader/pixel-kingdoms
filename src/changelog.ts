@@ -17,6 +17,7 @@ export const CHANGELOG: ChangelogEntry[] = [
       'Food no longer runs out once the wild food near your village is gone.',
       'The enemy plants paddies, moves workers between resources as it needs them, and no longer stalls its army while saving up for an age.',
       'Select a rice paddy and press Z to turn auto-replant off or on. With it off, the paddy disappears when empty instead of costing 40 wood.',
+      'Rice paddies now look like a golden harvest field with a scarecrow; the rice thins out and straw bundles pile up as you harvest it.',
     ],
   },
   {

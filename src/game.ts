@@ -1176,7 +1176,7 @@ export class Game {
       }
       if (s.garrison) info.insertAdjacentHTML('beforeend', `<div>${garrisoned(w, e).length}/${s.garrison} inside. Archers add arrows.</div>`);
       if (e.type === 'market') info.insertAdjacentHTML('beforeend', `<div class="dim">Trade: +${tradeIncome(w, PLAYER).toFixed(2)} gold/s. Merchants: ${w.teams[PLAYER].merchants}/${MARKET.maxMerchants}</div>`);
-      if (e.type === 'farm') info.insertAdjacentHTML('beforeend', `<div>${Math.ceil(e.amount)} food left.</div><div class="dim">${e.noReplant ? 'Auto-replant off: disappears when empty.' : 'Auto-replant on: 40 wood when empty.'}</div>`);
+      if (e.type === 'farm') info.insertAdjacentHTML('beforeend', `<div>${Math.ceil(e.amount)} food left.</div><div class="dim">${e.noReplant ? 'Replant off' : 'Replant on (40 wood)'}</div>`);
       if (s.gate) info.insertAdjacentHTML('beforeend', `<div class="dim">${e.locked ? 'Locked: nobody can pass.' : 'Open for your units only.'}</div>`);
       if (e.hp < e.maxHp) info.insertAdjacentHTML('beforeend', `<div class="dim">Right-click it with villagers to repair.</div>`);
       if (e.queue.length) {
