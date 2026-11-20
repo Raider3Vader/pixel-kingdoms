@@ -39,8 +39,7 @@ body {
 
 #stage {
   position: relative;
-  width: calc(640px * var(--s));
-  height: calc(360px * var(--s));
+  flex: none;
   font-size: calc(8px * var(--s));
   line-height: 1.25;
   image-rendering: pixelated;
@@ -143,7 +142,7 @@ button:focus-visible {
   bottom: 0;
   height: calc(68px * var(--s));
   display: grid;
-  grid-template-columns: calc(250px * var(--s)) 1fr calc(68px * var(--s));
+  grid-template-columns: calc(220px * var(--s)) 1fr calc(68px * var(--s));
   background: var(--panel);
   border-top: calc(1px * var(--s)) solid var(--edge);
 }
@@ -168,7 +167,7 @@ button:focus-visible {
 
 .cmd {
   position: relative;
-  width: calc(62px * var(--s));
+  width: calc(58px * var(--s));
   height: calc(46px * var(--s));
   padding: calc(2px * var(--s));
   display: flex;

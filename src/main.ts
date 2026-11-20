@@ -3,7 +3,6 @@ import './style.css';
 import { Audio } from './audio';
 import { DIFFICULTY, RENDER, type DifficultyKey } from './config';
 import { Game } from './game';
-import { integerScale } from './render/scale';
 import { setTheme, type ThemeName } from './render/sprites';
 
 const $ = <E extends HTMLElement>(id: string): E => document.getElementById(id) as E;
@@ -34,11 +33,32 @@ try {
 }
 setTheme(themeName);
 
+/**
+ * Fill the whole window. Pick the biggest whole-number scale that still leaves
+ * room for the HUD (at least 600 x 320 game pixels), then size the view to the
+ * window at that scale, so there are no black bars and pixels stay crisp.
+ */
 function fit(): void {
-  let s = integerScale(window.innerWidth, window.innerHeight, RENDER.width, RENDER.height);
-  // smaller than one game screen (a phone): shrink to fit, even if pixels soften
-  const fitS = Math.min(window.innerWidth / RENDER.width, window.innerHeight / RENDER.height);
-  if (fitS < 1) s = Math.floor(fitS * 100) / 100;
+  const W = window.innerWidth;
+  const H = window.innerHeight;
+  if (W < 50 || H < 50) return; // hidden or not laid out yet
+  let s = Math.max(1, Math.min(Math.floor(W / 600), Math.floor(H / 320)));
+  let iw = Math.ceil(W / s);
+  let ih = Math.ceil(H / s);
+  if (W < 600 || H < 320) {
+    // a phone: keep a 640 x 360 view and shrink it to fit
+    s = Math.floor(Math.min(W / 640, H / 360) * 100) / 100;
+    iw = 640;
+    ih = 360;
+  }
+  RENDER.width = iw;
+  RENDER.height = ih;
+  canvas.width = iw;
+  canvas.height = ih;
+  ctx.imageSmoothingEnabled = false;
+  const stage = document.getElementById('stage')!;
+  stage.style.width = `${iw * s}px`;
+  stage.style.height = `${ih * s}px`;
   document.documentElement.style.setProperty('--s', String(s));
 }
 window.addEventListener('resize', fit);
@@ -143,6 +163,12 @@ $('theme').addEventListener('click', (e) => {
   game = new Game(canvas, audio, { difficulty: 'hard', seed: Math.floor(Math.random() * 1e9), attract: true });
   renderMenu();
 });
+function toggleFullscreen(): void {
+  if (document.fullscreenElement) void document.exitFullscreen();
+  else void document.documentElement.requestFullscreen?.().catch(() => undefined);
+}
+$('full-btn').addEventListener('click', toggleFullscreen);
+$('full-btn2').addEventListener('click', toggleFullscreen);
 $('start').addEventListener('click', startGame);
 $('mute-btn').addEventListener('click', () => {
   audio.unlock();

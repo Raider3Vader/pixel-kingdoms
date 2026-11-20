@@ -13,6 +13,7 @@ import {
   type UnitType,
 } from '../config';
 import { findPath, nearestFree, type Pt } from './path';
+import { formationTargets, type Formation } from './formation';
 
 export const T = 16; // tile size in world px
 export const PLAYER = 0;
@@ -63,6 +64,8 @@ export interface Entity {
   rally: Pt | null;
   rallyTarget: number;
   pending: Order[]; // queued orders (Shift + right-click), done in turn
+  formation: Formation | null; // set with the formation keys
+  speedCap: number; // tiles/s; > 0 while marching in formation
   seen: boolean; // has the player ever seen it
   housed: boolean;
   // resources
@@ -201,6 +204,8 @@ function blank(w: World, kind: Kind, type: string, team: number, x: number, y: n
     rally: null,
     rallyTarget: 0,
     pending: [],
+    formation: null,
+    speedCap: 0,
     seen: false,
     housed: false,
     amount: 0,
@@ -403,6 +408,7 @@ export function cancelTrain(w: World, building: Entity, index: number): void {
 
 export function setOrder(u: Entity, o: Order): void {
   u.order = o;
+  u.speedCap = 0;
   u.path = [];
   u.repathT = 0;
   u.goalX = -1;
@@ -410,6 +416,13 @@ export function setOrder(u: Entity, o: Order): void {
 
 export function orderMove(w: World, units: Entity[], x: number, y: number, attackMove = false): void {
   const list = units.filter((u) => u.kind === 'unit' && !u.dead);
+  const f = list[0]?.formation;
+  if (list.length > 1 && f && list.every((u) => u.formation === f)) {
+    const cx = list.reduce((a, u) => a + u.x, 0) / list.length;
+    const cy = list.reduce((a, u) => a + u.y, 0) / list.length;
+    placeFormation(w, list, f, x, y, x - cx, y - cy, attackMove);
+    return;
+  }
   // spread units out in a small grid around the point
   const cols = Math.ceil(Math.sqrt(list.length));
   const spacing = 11;
@@ -424,6 +437,39 @@ export function orderMove(w: World, units: Entity[], x: number, y: number, attac
     }
     setOrder(u, { type: 'move', x: px, y: py, attackMove });
   });
+}
+
+/** Puts units into formation around (x, y), facing (dx, dy). They march at the slowest one's pace. */
+export function placeFormation(w: World, list: Entity[], f: Formation, x: number, y: number, dx: number, dy: number, attackMove = false): void {
+  const pts = formationTargets(list, f, x, y, dx, dy);
+  const slowest = Math.min(...list.map((u) => UNITS[u.type as UnitType].speed));
+  list.forEach((u, i) => {
+    let { x: px, y: py } = pts[i];
+    if (w.isBlocked(tileOf(px), tileOf(py))) {
+      const free = nearestFree(w, Math.max(0, Math.min(w.w - 1, tileOf(px))), Math.max(0, Math.min(w.h - 1, tileOf(py))), 4);
+      if (free) {
+        px = (free.x + 0.5) * T;
+        py = (free.y + 0.5) * T;
+      }
+    }
+    setOrder(u, { type: 'move', x: px, y: py, attackMove });
+    u.speedCap = slowest;
+  });
+}
+
+/** Formation key: set the formation and line up where the group stands. */
+export function orderFormation(w: World, units: Entity[], f: Formation): void {
+  const list = units.filter((u) => u.kind === 'unit' && !u.dead && u.type !== 'villager');
+  if (list.length === 0) return;
+  for (const u of list) {
+    u.formation = f;
+    u.pending.length = 0;
+  }
+  if (list.length < 2) return;
+  const cx = list.reduce((a, u) => a + u.x, 0) / list.length;
+  const cy = list.reduce((a, u) => a + u.y, 0) / list.length;
+  // a fresh formation faces down the screen, so a line is horizontal
+  placeFormation(w, list, f, cx, cy, 0, 1);
 }
 
 export function orderGather(w: World, units: Entity[], res: Entity): void {
@@ -541,7 +587,8 @@ function unstick(w: World, u: Entity): void {
 }
 
 function speedPx(u: Entity): number {
-  return UNITS[u.type as UnitType].speed * T;
+  const base = UNITS[u.type as UnitType].speed;
+  return (u.speedCap > 0 ? Math.min(base, u.speedCap) : base) * T;
 }
 
 /** Moves along the current path. Returns true when the path is used up. */

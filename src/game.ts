@@ -18,6 +18,7 @@ import {
   entityAt,
   isSoldier,
   orderMove,
+  orderFormation,
   placeBuilding,
   queueOrder,
   setOrder,
@@ -299,7 +300,7 @@ export class Game {
 
   render(ctx: CanvasRenderingContext2D): void {
     const ghost = this.ghost();
-    const rallyFor = this.selected.length === 1 && this.selected[0].kind === 'building' && this.selected[0].team === PLAYER ? this.selected[0] : null;
+    const rallyFor = this.selected.length >= 1 && this.selected[0].kind === 'building' && this.selected[0].team === PLAYER ? this.selected[0] : null;
     drawWorld(ctx, this.world, this.terrain, this.cam, this.fx, {
       selected: new Set(this.selected.map((e) => e.id)),
       hoverId: this.hoverId,
@@ -381,8 +382,31 @@ export class Game {
         });
       });
     } else if (soldiers.length) {
+      const current = soldiers.every((u) => u.formation === soldiers[0].formation) ? soldiers[0].formation : null;
+      const forms: [string, 'line' | 'block' | 'box', string, string][] = [
+        ['Z', 'line', 'Line', 'One wide row, side by side. Archers stand behind when there are many.'],
+        ['X', 'block', 'Block', 'A tight rectangle: fighters in front, archers at the back.'],
+        ['C', 'box', 'Box', 'A hollow square: fighters on the outside, archers protected inside.'],
+      ];
+      for (const [key, f, label, tip] of forms) {
+        out.push({
+          key,
+          icon: `form-${f}`,
+          label,
+          enabled: true,
+          active: current === f,
+          tip: `${tip} They keep it when they move, marching at the slowest unit's pace. Press again to break formation.`,
+          run: () => {
+            if (current === f) {
+              for (const u of soldiers) u.formation = null;
+              this.toast('Formation off.');
+            } else orderFormation(this.world, soldiers, f);
+            this.audio.play('command');
+          },
+        });
+      }
       out.push({
-        key: 'Z',
+        key: 'V',
         icon: 'swordsman',
         label: 'Attack-move',
         enabled: true,
@@ -394,7 +418,7 @@ export class Game {
         },
       });
       out.push({
-        key: 'X',
+        key: 'B',
         icon: 'archer',
         label: 'Stop',
         enabled: true,
@@ -407,9 +431,10 @@ export class Game {
           this.audio.play('command');
         },
       });
-    } else if (sel.length === 1 && sel[0].kind === 'building' && sel[0].progress >= 1) {
-      const b = sel[0];
-      BUILDINGS[b.type as BuildingType].trains.forEach((u, i) => {
+    } else if (sel.length >= 1 && sel.every((b) => b.kind === 'building' && b.type === sel[0].type) && sel.some((b) => b.progress >= 1)) {
+      // one or more buildings of the same kind: each click trains one in every one of them
+      const ready = sel.filter((b) => b.progress >= 1);
+      BUILDINGS[sel[0].type as BuildingType].trains.forEach((u, i) => {
         const s = UNITS[u];
         out.push({
           key: keys[i],
@@ -417,18 +442,25 @@ export class Game {
           label: s.name,
           food: s.food,
           wood: s.wood,
-          enabled: team.food >= s.food && team.wood >= s.wood && b.queue.length < 5,
-          tip: TIPS[u],
-          run: () => this.trainAt(b, u),
+          enabled: team.food >= s.food && team.wood >= s.wood && ready.some((b) => b.queue.length < 5),
+          tip: TIPS[u] + (ready.length > 1 ? ` Trains one in each of your ${ready.length} selected buildings.` : ''),
+          run: () => this.trainAt(ready, u),
         });
       });
     }
     return out;
   }
 
-  private trainAt(b: Entity, u: UnitType): void {
-    const r = train(this.world, b, u);
-    if (r === 'ok') this.audio.play('click');
+  private trainAt(list: Entity[], u: UnitType): void {
+    // shortest queues first, so one click spreads across all selected buildings
+    let r: ReturnType<typeof train> = 'cannot';
+    let any = false;
+    for (const b of [...list].sort((a, c) => a.queue.length - c.queue.length)) {
+      r = train(this.world, b, u);
+      if (r === 'ok') any = true;
+      else if (r === 'food' || r === 'wood') break;
+    }
+    if (any) this.audio.play('click');
     else {
       this.audio.play('error');
       this.toast(r === 'food' ? 'Not enough food.' : r === 'wood' ? 'Not enough wood.' : r === 'queue' ? 'The queue is full.' : 'Cannot train that here.');
@@ -625,12 +657,14 @@ export class Game {
     const w = this.world;
     const mine = this.mySel();
     if (mine.length === 0) return;
-    if (mine.length === 1 && mine[0].kind === 'building') {
-      const b = mine[0];
-      if (BUILDINGS[b.type as BuildingType].trains.length === 0) return;
+    if (mine.every((b) => b.kind === 'building')) {
+      const trainers = mine.filter((b) => BUILDINGS[b.type as BuildingType].trains.length > 0);
+      if (trainers.length === 0) return;
       const t = entityAt(w, x, y, (e) => e.kind === 'resource' && visibleTo(w, PLAYER, e));
-      b.rally = { x, y };
-      b.rallyTarget = t ? t.id : 0;
+      for (const b of trainers) {
+        b.rally = { x, y };
+        b.rallyTarget = t ? t.id : 0;
+      }
       this.fx.marker(x, y, false);
       this.audio.play('command');
       return;
@@ -655,6 +689,11 @@ export class Game {
     if (dbl && e.team === PLAYER && e.kind === 'unit') {
       const same = this.world.units.filter((u) => u.team === PLAYER && u.type === e.type && this.onScreen(u.x, u.y));
       this.select(same);
+      return;
+    }
+    if (dbl && e.team === PLAYER && e.kind === 'building') {
+      // every building of this kind you own, anywhere on the map
+      this.select(this.world.buildings.filter((b) => b.team === PLAYER && b.type === e.type));
       return;
     }
     if (shift && e.team === PLAYER && e.kind === 'unit' && this.mySel().every((s) => s.kind === 'unit')) {
@@ -709,15 +748,14 @@ export class Game {
       e.preventDefault();
       return;
     }
-    if (/^[1-9]$/.test(k)) {
-      const n = Number(k);
+    const digit = /^Digit([1-9])$/.exec(e.code);
+    if (digit) {
+      const n = Number(digit[1]);
       if (e.ctrlKey || e.metaKey) {
         e.preventDefault();
-        this.groups.set(
-          n,
-          this.mySel().map((s) => s.id),
-        );
-        this.toast(`Group ${n} saved.`);
+        const ids = this.mySel().map((s) => s.id);
+        this.groups.set(n, ids);
+        this.toast(ids.length ? `Group ${n}: ${ids.length} selected. Press ${n} to pick them again.` : `Group ${n} cleared.`);
       } else {
         const ids = this.groups.get(n) ?? [];
         const list = ids.map((id) => this.world.get(id)).filter((x): x is Entity => !!x);
@@ -815,7 +853,7 @@ export class Game {
         b.appendChild(k);
         const cost = document.createElement('span');
         cost.className = 'cost';
-        cost.textContent = c.label === 'Attack-move' ? 'Attack' : c.label === 'Stop' ? 'Stop' : [c.food ? `${c.food}F` : '', c.wood ? `${c.wood}W` : ''].filter(Boolean).join(' ');
+        cost.textContent = c.label === 'Attack-move' ? 'Attack' : c.food || c.wood ? [c.food ? `${c.food}F` : '', c.wood ? `${c.wood}W` : ''].filter(Boolean).join(' ') : c.label;
         b.appendChild(cost);
         box.appendChild(b);
       });
@@ -903,7 +941,7 @@ export class Game {
     for (const e of sel) counts.set(e.type, (counts.get(e.type) ?? 0) + 1);
     info.insertAdjacentHTML(
       'beforeend',
-      `<div class="sel-name">${sel.length} selected: ${[...counts].map(([k, n]) => `${n} ${UNITS[k as UnitType]?.name ?? k}`).join(', ')}</div>`,
+      `<div class="sel-name">${sel.length} selected: ${[...counts].map(([k, n]) => `${n} ${UNITS[k as UnitType]?.name ?? BUILDINGS[k as BuildingType]?.name ?? k}`).join(', ')}</div>`,
     );
     const g = document.createElement('div');
     g.className = 'group';

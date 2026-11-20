@@ -9,7 +9,9 @@ import {
   T,
   World,
   orderAttack,
+  orderFormation,
   orderGather,
+  orderMove,
   placeBuilding,
   queueOrder,
   spawnBuilding,
@@ -245,5 +247,51 @@ describe('stable', () => {
     const { world: w } = createMatch(2);
     expect(teamUnits(w, PLAYER, 'scout').length).toBe(1);
     expect(teamUnits(w, ENEMY, 'scout').length).toBe(1);
+  });
+});
+
+describe('formations', () => {
+  const army = (w: World): ReturnType<typeof spawnUnit>[] => {
+    const list = [];
+    for (let i = 0; i < 4; i++) list.push(spawnUnit(w, 'swordsman', PLAYER, (20 + i) * T, 20 * T));
+    for (let i = 0; i < 3; i++) list.push(spawnUnit(w, 'archer', PLAYER, (20 + i) * T, 22 * T));
+    list.push(spawnUnit(w, 'cavalry', PLAYER, 24 * T, 22 * T));
+    return list;
+  };
+
+  it('a line forms a single horizontal row', () => {
+    const w = testWorld();
+    const list = army(w);
+    orderFormation(w, list, 'line');
+    run(w, 15);
+    const ys = list.map((u) => u.y);
+    expect(Math.max(...ys) - Math.min(...ys)).toBeLessThan(6);
+  });
+
+  it('a box puts melee on the edge and archers inside', () => {
+    const w = testWorld();
+    const list = [...army(w)];
+    for (let i = 0; i < 5; i++) list.push(spawnUnit(w, 'swordsman', PLAYER, (20 + i) * T, 24 * T));
+    orderFormation(w, list, 'box');
+    run(w, 20);
+    const cx = list.reduce((a, u) => a + u.x, 0) / list.length;
+    const cy = list.reduce((a, u) => a + u.y, 0) / list.length;
+    const dist = (u: (typeof list)[0]): number => Math.max(Math.abs(u.x - cx), Math.abs(u.y - cy));
+    const archers = list.filter((u) => u.type === 'archer').map(dist);
+    const melee = list.filter((u) => u.type !== 'archer').map(dist);
+    expect(Math.max(...archers)).toBeLessThan(Math.max(...melee));
+  });
+
+  it('a formation marches at the slowest unit’s pace', () => {
+    const w = testWorld();
+    const list = army(w);
+    orderFormation(w, list, 'block');
+    run(w, 10);
+    orderMove(w, list, 34 * T, 34 * T);
+    run(w, 3);
+    const cav = list.find((u) => u.type === 'cavalry')!;
+    const sw = list.find((u) => u.type === 'swordsman')!;
+    expect(cav.speedCap).toBeCloseTo(1.4);
+    expect(Math.abs(Math.hypot(cav.x - 34 * T, cav.y - 34 * T) - Math.hypot(sw.x - 34 * T, sw.y - 34 * T))).toBeLessThan(40);
   });
 });

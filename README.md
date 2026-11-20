@@ -18,13 +18,14 @@ Archers beat Swordsmen, Cavalry beats Archers, Swordsmen beat Cavalry.
 | --- | --- |
 | Left click / drag | Select units (double click: all of that type on screen) |
 | Right click | Move, gather, build or attack; with a building selected, set its rally point |
-| Z X C V | The command buttons (build, train, attack-move, stop) |
+| Z X C V B | The command buttons. With soldiers: Z line, X block, C box formation, V attack-move, B stop |
+| Double click a building | Select all of that kind; a train key queues one in each |
 | Shift | Add to the selection, or keep placing buildings |
 | Shift + right click | Queue orders: waypoints for a scout, or gather one tree then a sheep |
 | W A S D, arrows, screen edge | Move the camera |
 | Mouse wheel | Zoom in and out |
 | H / Q (or .) | Town Center / next idle villager |
-| Ctrl + 1-9, then 1-9 | Save and recall groups |
+| Ctrl + 1-9, then 1-9 | Save a group, then select it (press twice to jump there). Cmd + 1-9 is usually taken by the browser for tabs |
 | Space | Jump to the last attack, or to the selection |
 | M / Esc | Mute / pause |
 

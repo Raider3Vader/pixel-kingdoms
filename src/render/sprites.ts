@@ -549,6 +549,19 @@ export function foundationSprite(size: number): HTMLCanvasElement {
 
 /** A 16 x 16 icon for the HUD. */
 export function iconFor(type: string, team = 0): HTMLCanvasElement {
+  if (type.startsWith('form-')) {
+    return make(`icon:${type}`, 16, 16, (px) => {
+      const dots: [number, number][] = [];
+      if (type === 'form-line') for (let i = 0; i < 6; i++) dots.push([1 + i * 2.4, 7]);
+      else if (type === 'form-block') for (let r = 0; r < 3; r++) for (let c = 0; c < 4; c++) dots.push([2 + c * 3.5, 3 + r * 4]);
+      else for (let r = 0; r < 4; r++) for (let c = 0; c < 4; c++) if (r === 0 || c === 0 || r === 3 || c === 3) dots.push([2 + c * 3.5, 2 + r * 3.5]);
+      for (const [x, y] of dots) {
+        px(Math.round(x), Math.round(y), 2, 2, PAL.sky);
+        px(Math.round(x), Math.round(y), 1, 1, PAL.white);
+      }
+      if (type === 'form-box') px(7, 7, 2, 2, PAL.yellow);
+    });
+  }
   if (type === 'villager' || type === 'swordsman' || type === 'archer' || type === 'cavalry' || type === 'scout') return unitSprite(type, team, 'idle', 0, '');
   if (type === 'tree') return treeSprite(0);
   if (type === 'berries') return berrySprite(6);

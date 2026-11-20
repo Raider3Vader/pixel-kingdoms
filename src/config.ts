@@ -13,13 +13,14 @@ export const SIM = {
   scanSec: 0.5, // how often idle soldiers look for enemies
 } as const;
 
-export const RENDER = {
-  width: 640, // internal resolution, upscaled by whole numbers only
+/** Internal resolution. width and height change with the window (see main.ts). */
+export const RENDER: { width: number; height: number; tileSize: number; hudTop: number; hudBottom: number } = {
+  width: 640, // upscaled by whole numbers only
   height: 360,
   tileSize: 16,
   hudTop: 12, // px of internal resolution covered by the top bar
   hudBottom: 68, // px covered by the bottom panel
-} as const;
+};
 
 export const MAP = {
   widthTiles: 64,
