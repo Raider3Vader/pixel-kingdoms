@@ -81,6 +81,7 @@ export interface Entity {
   hostile: boolean; // soldiers: chase any enemy in sight, even while marching
   inside: number; // id of the tower this unit is garrisoned in, or 0
   locked: boolean; // gates: closed to everyone
+  noReplant: boolean; // rice paddies: don't replant when it runs dry
   research: { key: 'age' | 'merchant' | 'towerUpgrade'; t: number; sec: number } | null;
   repairDebt: Cost; // fractional repair costs not yet paid
   speedCap: number; // tiles/s; > 0 while marching in formation
@@ -240,6 +241,7 @@ function blank(w: World, kind: Kind, type: string, team: number, x: number, y: n
     hostile: false,
     inside: 0,
     locked: false,
+    noReplant: false,
     research: null,
     repairDebt: {},
     speedCap: 0,
@@ -1197,7 +1199,7 @@ function gatherStep(w: World, u: Entity, dt: number): void {
   u.carry += take;
   res.amount -= take;
   if (res.amount <= 1e-6) {
-    if (res.type === 'farm' && canAfford(w, res.team, FARM.reseed)) {
+    if (res.type === 'farm' && !res.noReplant && canAfford(w, res.team, FARM.reseed)) {
       // a rice paddy replants itself
       pay(w, res.team, FARM.reseed);
       res.amount = res.startAmount;

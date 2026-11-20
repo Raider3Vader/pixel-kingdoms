@@ -167,6 +167,19 @@ describe('economy extras', () => {
     expect(w.teams[PLAYER].wood).toBe(wood0 - 40); // replanted
   });
 
+  it('a paddy with auto-replant off disappears when empty', () => {
+    const w = testWorld();
+    const farm = spawnBuilding(w, 'farm', PLAYER, 8, 2, true);
+    farm.amount = 5;
+    farm.noReplant = true;
+    const v = spawnUnit(w, 'villager', PLAYER, 10 * T, 4 * T);
+    setOrder(v, { type: 'gather', target: farm.id, resType: 'farm', phase: 'go', dropId: 0 });
+    const wood0 = w.teams[PLAYER].wood;
+    run(w, 40);
+    expect(farm.dead).toBe(true);
+    expect(w.teams[PLAYER].wood).toBe(wood0);
+  });
+
   it('villagers mine gold and stone', () => {
     const w = testWorld();
     const g = spawnResource(w, 'gold', 9, 3)!;

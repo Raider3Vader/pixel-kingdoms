@@ -16,6 +16,7 @@ export const CHANGELOG: ChangelogEntry[] = [
       'New building: the Rice paddy (60 wood). A villager works it for 300 food, then it replants itself for 40 wood. Units can walk over it.',
       'Food no longer runs out once the wild food near your village is gone.',
       'The enemy plants paddies, moves workers between resources as it needs them, and no longer stalls its army while saving up for an age.',
+      'Select a rice paddy and press Z to turn auto-replant off or on. With it off, the paddy disappears when empty instead of costing 40 wood.',
     ],
   },
   {
