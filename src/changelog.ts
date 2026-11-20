@@ -16,6 +16,7 @@ export const CHANGELOG: ChangelogEntry[] = [
       'A thick forest belt now crosses each half of the map, between your village and the middle, with two or three narrow gaps: choke points to hold or wall off.',
       'A few dense woods with no way through, and open meadows in between.',
       'Villagers can still chop a new path through any forest.',
+      'Trees scattered along the river banks, and small groves where the river meets the edge of the map.',
     ],
   },
   {

@@ -91,7 +91,7 @@ export function createMatch(seed: number): Setup {
   // the river: runs corner to corner between the villages, symmetric under the
   // map's 180-degree mirror, with three bridges (center and two flanks)
   const C = N / 2;
-  const riverAt = (x: number, y: number): { water: boolean; bridge: boolean; near: boolean } => {
+  const riverAt = (x: number, y: number): { water: boolean; bridge: boolean; near: boolean; off: number; s: number } => {
     const rx = x + 0.5 - C;
     const ry = y + 0.5 - C;
     const s = (rx - ry) / Math.SQRT2; // along the river
@@ -99,7 +99,7 @@ export function createMatch(seed: number): Setup {
     const off = d - 4.5 * Math.sin(s / 9.5);
     const crossing = Math.abs(s) < 1.6 || Math.abs(Math.abs(s) - 26) < 1.6;
     const inRiver = Math.abs(off) < 1.5;
-    return { water: inRiver && !crossing, bridge: inRiver && crossing, near: Math.abs(off) < 3.5 && (Math.abs(s) < 3.5 || Math.abs(Math.abs(s) - 26) < 3.5) };
+    return { water: inRiver && !crossing, bridge: inRiver && crossing, near: Math.abs(off) < 3.5 && (Math.abs(s) < 3.5 || Math.abs(Math.abs(s) - 26) < 3.5), off, s };
   };
   for (let y = 0; y < N; y++) {
     for (let x = 0; x < N; x++) {
@@ -111,6 +111,17 @@ export function createMatch(seed: number): Setup {
       }
       if (r.bridge) w.bridge[i] = 1;
       if (r.water || r.bridge || r.near) forest[i] = 0;
+    }
+  }
+  // trees along the river banks, and small groves where it enters and leaves the map
+  for (let y = 0; y < N; y++) {
+    for (let x = 0; x < N; x++) {
+      const r = riverAt(x, y);
+      if (r.water || r.bridge || r.near) continue;
+      const bank = Math.abs(r.off);
+      if (bank < 1.6) continue;
+      if (bank < 4.5 && rand() < 0.16) setF(x, y);
+      else if (Math.abs(r.s) > 44 && bank < 8 && rand() < 0.45) setF(x, y);
     }
   }
 
