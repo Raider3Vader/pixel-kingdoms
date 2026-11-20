@@ -35,6 +35,7 @@ interface Cmd {
   key: string;
   icon: string;
   label: string;
+  status?: string; // short state shown under the icon, e.g. On / Off
   food?: number;
   wood?: number;
   enabled: boolean;
@@ -405,29 +406,35 @@ export class Game {
           },
         });
       }
+      const allHostile = soldiers.every((u) => u.hostile);
       out.push({
         key: 'V',
-        icon: 'swordsman',
-        label: 'Attack-move',
+        icon: allHostile ? 'hostile-on' : 'hostile-off',
+        label: 'Hostile',
+        status: allHostile ? 'on' : 'off',
         enabled: true,
-        active: this.mode.kind === 'attackMove',
-        tip: 'Then click the map: they walk there and fight anything on the way.',
+        active: allHostile,
+        tip: 'On: they go after any enemy they can see, even while marching. Off: they ignore enemies unless attacked, so you can retreat.',
         run: () => {
-          this.mode = { kind: 'attackMove' };
-          this.audio.play('click');
+          const on = !allHostile;
+          for (const u of soldiers) u.hostile = on;
+          this.toast(on ? 'Hostile: they will attack any enemy in sight.' : 'Hostile off: they only fight back when attacked.');
+          this.audio.play('command');
         },
       });
       out.push({
         key: 'B',
-        icon: 'archer',
-        label: 'Stop',
+        icon: 'standdown',
+        label: 'Stand down',
         enabled: true,
-        tip: 'Stop and stand guard.',
+        tip: 'Stop everything, drop their orders, and turn Hostile off. They stay put and only fight back if attacked.',
         run: () => {
           for (const s of soldiers) {
             s.pending.length = 0;
+            s.hostile = false;
             setOrder(s, { type: 'idle' });
           }
+          this.toast('Standing down.');
           this.audio.play('command');
         },
       });
@@ -837,7 +844,7 @@ export class Game {
 
     // command buttons: rebuild only when something changed
     this.cmds = this.commands();
-    const key = this.cmds.map((c) => `${c.label}:${c.enabled}:${c.active}`).join('|') + this.mySel().map((s) => s.id).join(',');
+    const key = this.cmds.map((c) => `${c.label}:${c.enabled}:${c.active}:${c.icon}`).join('|') + this.mySel().map((s) => s.id).join(',');
     if (key !== this.cmdKey) {
       this.cmdKey = key;
       const box = $('cmds');
@@ -853,7 +860,7 @@ export class Game {
         b.appendChild(k);
         const cost = document.createElement('span');
         cost.className = 'cost';
-        cost.textContent = c.label === 'Attack-move' ? 'Attack' : c.food || c.wood ? [c.food ? `${c.food}F` : '', c.wood ? `${c.wood}W` : ''].filter(Boolean).join(' ') : c.label;
+        cost.textContent = c.status ? `${c.label} ${c.status}` : c.food || c.wood ? [c.food ? `${c.food}F` : '', c.wood ? `${c.wood}W` : ''].filter(Boolean).join(' ') : c.label;
         b.appendChild(cost);
         box.appendChild(b);
       });
@@ -864,7 +871,7 @@ export class Game {
     info.innerHTML = '';
     const sel = this.selected;
     if (sel.length === 0) {
-      info.innerHTML = `<div class="dim">Left-click or drag to select.<br>Right-click to give orders.<br><br>H: Town Center &nbsp; Q: idle villager<br>Shift+right-click: queue orders</div>`;
+      info.innerHTML = `<div class="dim">Click or drag: select<br>Right-click: give orders<br>H: Town Center<br>Q: idle villager</div>`;
       return;
     }
     if (sel.length === 1) {
@@ -891,8 +898,8 @@ export class Game {
         if (o.type === 'gather') task = o.phase === 'drop' ? `Carrying ${Math.floor(e.carry)} ${e.carryKind ?? ''}` : `Gathering ${o.resType === 'tree' ? 'wood' : 'food'} (${Math.floor(e.carry)}/10)`;
         else if (o.type === 'build') task = 'Building';
         else if (o.type === 'attack') task = 'Fighting';
-        else if (o.type === 'move') task = o.attackMove ? 'Attack-moving' : 'Moving';
-        else task = e.type === 'villager' ? '<span class="warn">Idle</span>' : 'On guard';
+        else if (o.type === 'move') task = e.hostile ? 'Marching (hostile)' : 'Moving';
+        else task = e.type === 'villager' ? '<span class="warn">Idle</span>' : e.hostile ? 'On guard (hostile)' : 'Standing down';
         col.innerHTML = `<div class="sel-name">${s.name}${owner}</div><div>HP ${Math.ceil(e.hp)}/${e.maxHp}</div><div class="bar"><i style="width:${(e.hp / e.maxHp) * 100}%"></i></div>`;
         const more = document.createElement('div');
         more.innerHTML = `<div class="dim">Attack ${s.attack} ${bonus} ${s.rangeTiles ? `Range ${s.rangeTiles}` : ''}</div>${e.team === PLAYER ? `<div>${task}</div>` : ''}`;

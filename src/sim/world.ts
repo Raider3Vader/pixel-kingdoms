@@ -65,6 +65,7 @@ export interface Entity {
   rallyTarget: number;
   pending: Order[]; // queued orders (Shift + right-click), done in turn
   formation: Formation | null; // set with the formation keys
+  hostile: boolean; // soldiers: chase any enemy in sight, even while marching
   speedCap: number; // tiles/s; > 0 while marching in formation
   seen: boolean; // has the player ever seen it
   housed: boolean;
@@ -205,6 +206,7 @@ function blank(w: World, kind: Kind, type: string, team: number, x: number, y: n
     rallyTarget: 0,
     pending: [],
     formation: null,
+    hostile: false,
     speedCap: 0,
     seen: false,
     housed: false,
@@ -215,6 +217,7 @@ function blank(w: World, kind: Kind, type: string, team: number, x: number, y: n
 
 export function spawnUnit(w: World, type: UnitType, team: number, x: number, y: number): Entity {
   const e = blank(w, 'unit', type, team, x, y, UNITS[type].hp);
+  e.hostile = type !== 'villager' && type !== 'scout';
   w.ents.set(e.id, e);
   w.units.push(e);
   return e;
@@ -996,8 +999,9 @@ function updateUnit(w: World, u: Entity, dt: number): void {
   const soldier = u.type !== 'villager';
   const sight = UNITS[u.type as UnitType].sight * T;
 
-  // scouts explore: they only fight when attacked or told to
-  if (soldier && u.type !== 'scout' && (o.type === 'idle' || (o.type === 'move' && o.attackMove))) {
+  // Hostile soldiers go after any enemy in sight, even while marching.
+  // Others (scouts, or soldiers told to stand down) only fight back when hit.
+  if (soldier && (o.type === 'idle' || o.type === 'move') && (u.hostile || (o.type === 'move' && o.attackMove))) {
     u.scanT -= dt;
     if (u.scanT <= 0) {
       u.scanT = SIM.scanSec;

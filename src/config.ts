@@ -19,7 +19,7 @@ export const RENDER: { width: number; height: number; tileSize: number; hudTop: 
   height: 360,
   tileSize: 16,
   hudTop: 12, // px of internal resolution covered by the top bar
-  hudBottom: 68, // px covered by the bottom panel
+  hudBottom: 54, // px covered by the bottom panel
 };
 
 export const MAP = {

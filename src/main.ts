@@ -3,6 +3,8 @@ import './style.css';
 import { Audio } from './audio';
 import { DIFFICULTY, RENDER, type DifficultyKey } from './config';
 import { Game } from './game';
+import { CHANGELOG, VERSION } from './changelog';
+import { TitleScene } from './title';
 import { setTheme, type ThemeName } from './render/sprites';
 
 const $ = <E extends HTMLElement>(id: string): E => document.getElementById(id) as E;
@@ -65,10 +67,11 @@ window.addEventListener('resize', fit);
 fit();
 
 let game: Game = new Game(canvas, audio, { difficulty: 'hard', seed: Math.floor(Math.random() * 1e9), attract: true });
-let screen: 'menu' | 'playing' | 'paused' | 'over' = 'menu';
+let screen: 'title' | 'menu' | 'playing' | 'paused' | 'over' = 'title';
+const title = new TitleScene();
 
 function show(id: string | null): void {
-  for (const s of ['menu', 'pause', 'over', 'help']) $(s).classList.toggle('hidden', s !== id);
+  for (const s of ['title', 'menu', 'pause', 'over', 'help', 'changelog']) $(s).classList.toggle('hidden', s !== id);
 }
 
 const DIFF_HINTS: Record<DifficultyKey, string> = {
@@ -179,12 +182,63 @@ $('mute-btn').addEventListener('click', () => {
 $('help-btn').addEventListener('click', () => openHelp('menu'));
 $('help-btn2').addEventListener('click', () => openHelp('pause'));
 $('help-close').addEventListener('click', () => show(helpReturn));
+
+// ---------- title screen and changelog ----------
+function leaveTitle(): void {
+  if (screen !== 'title') return;
+  audio.unlock();
+  audio.play('click');
+  screen = 'menu';
+  show('menu');
+  renderMenu();
+}
+$('title').addEventListener('click', leaveTitle);
+$('title-ver').textContent = `v${VERSION}`;
+$('menu-ver').textContent = `Version ${VERSION}`;
+
+function fmtDate(iso: string): string {
+  const [y, m, d] = iso.split('-').map(Number);
+  return new Date(y, m - 1, d).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+}
+function renderChangelog(): void {
+  const list = $('changelog-list');
+  list.innerHTML = '';
+  for (const e of CHANGELOG) {
+    const sec = document.createElement('section');
+    const h = document.createElement('h3');
+    h.innerHTML = `v${e.version} &middot; ${e.title} <span class="date">${fmtDate(e.date)}</span>`;
+    sec.appendChild(h);
+    const ul = document.createElement('ul');
+    for (const it of e.items) {
+      const li = document.createElement('li');
+      li.textContent = it;
+      ul.appendChild(li);
+    }
+    sec.appendChild(ul);
+    list.appendChild(sec);
+  }
+}
+$('changelog-btn').addEventListener('click', () => {
+  audio.unlock();
+  audio.play('click');
+  renderChangelog();
+  show('changelog');
+});
+$('changelog-close').addEventListener('click', () => show('menu'));
 $('resume').addEventListener('click', resume);
 $('quit').addEventListener('click', toMenu);
 $('again').addEventListener('click', startGame);
 $('to-menu').addEventListener('click', toMenu);
 $('menu-btn').addEventListener('click', pause);
 window.addEventListener('keydown', (e) => {
+  if (screen === 'title') {
+    if (!e.metaKey && !e.ctrlKey) leaveTitle();
+    return;
+  }
+  if (e.key === 'Escape' && screen === 'menu' && !$('changelog').classList.contains('hidden')) {
+    show('menu');
+    return;
+  }
   if (e.key === 'Escape' && screen === 'playing') {
     if (!game.cancelMode()) pause();
   } else if (e.key === 'Escape' && screen === 'paused') {
@@ -192,7 +246,7 @@ window.addEventListener('keydown', (e) => {
     else resume();
   } else if (e.key === 'Escape' && screen === 'menu' && !$('help').classList.contains('hidden')) {
     show('menu');
-  } else if (e.key === 'Enter' && screen === 'menu' && $('help').classList.contains('hidden')) startGame();
+  } else if (e.key === 'Enter' && screen === 'menu' && $('help').classList.contains('hidden') && $('changelog').classList.contains('hidden')) startGame();
 });
 // keep buttons from holding keyboard focus (Space would click them again)
 document.addEventListener('mouseup', () => {
@@ -202,12 +256,18 @@ document.addEventListener('mouseup', () => {
 if (matchMedia('(pointer: coarse)').matches && !matchMedia('(any-pointer: fine)').matches) $('touch-note').hidden = false;
 
 renderMenu();
-show('menu');
+show('title');
 
 let last = performance.now();
 function frame(now: number): void {
   const dt = Math.min(0.25, (now - last) / 1000);
   last = now;
+  if (screen === 'title') {
+    title.update(dt);
+    title.render(ctx);
+    requestAnimationFrame(frame);
+    return;
+  }
   game.update(dt);
   if (screen === 'menu' && game.world.winner !== null) {
     game.destroy();

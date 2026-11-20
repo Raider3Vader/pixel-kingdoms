@@ -295,3 +295,26 @@ describe('formations', () => {
     expect(Math.abs(Math.hypot(cav.x - 34 * T, cav.y - 34 * T) - Math.hypot(sw.x - 34 * T, sw.y - 34 * T))).toBeLessThan(40);
   });
 });
+
+describe('hostile', () => {
+  it('hostile soldiers attack an enemy they pass; stood-down ones walk on', () => {
+    const w = testWorld();
+    const foe = spawnUnit(w, 'villager', ENEMY, 30 * T, 22 * T);
+    foe.hp = 1000;
+    foe.maxHp = 1000;
+    const a = spawnUnit(w, 'swordsman', PLAYER, 20 * T, 20 * T);
+    const b = spawnUnit(w, 'swordsman', PLAYER, 20 * T, 24 * T);
+    b.hostile = false;
+    orderMove(w, [a], 40 * T, 20 * T);
+    orderMove(w, [b], 40 * T, 24 * T);
+    run(w, 6);
+    expect(a.order.type).toBe('attack');
+    expect(b.order.type).toBe('move');
+  });
+
+  it('scouts are not hostile by default', () => {
+    const w = testWorld();
+    expect(spawnUnit(w, 'scout', PLAYER, 10 * T, 10 * T).hostile).toBe(false);
+    expect(spawnUnit(w, 'archer', PLAYER, 10 * T, 12 * T).hostile).toBe(true);
+  });
+});

@@ -28,7 +28,21 @@
         <div id="tooltip" class="hidden"></div>
       </div>
 
-      <div id="menu" class="screen">
+      <div id="title" class="screen title-screen">
+        <h1 class="big-title">Pixel Kingdoms</h1>
+        <p class="press">Click or press any key</p>
+        <p class="ver" id="title-ver"></p>
+      </div>
+
+      <div id="changelog" class="screen hidden">
+        <div class="card wide">
+          <h2>Changelog</h2>
+          <div id="changelog-list"></div>
+          <button id="changelog-close" class="big">Back</button>
+        </div>
+      </div>
+
+      <div id="menu" class="screen hidden">
         <div class="card">
           <h1>Pixel Kingdoms</h1>
           <p class="sub">Grow a village. Raise an army. Break the rival kingdom.</p>
@@ -47,9 +61,13 @@
           <button id="start" class="big">Start</button>
           <div class="row">
             <button id="help-btn">Controls</button>
-            <button id="mute-btn">Sound: on</button>
+            <button id="changelog-btn">Open changelog</button>
           </div>
-          <button id="full-btn">Full screen</button>
+          <div class="row">
+            <button id="mute-btn">Sound: on</button>
+            <button id="full-btn">Full screen</button>
+          </div>
+          <p class="hint" id="menu-ver"></p>
           <p class="hint" id="touch-note" hidden>Pixel Kingdoms needs a mouse and keyboard for now. Touch controls are coming later.</p>
         </div>
       </div>
@@ -88,8 +106,8 @@
               <dt>Right click</dt><dd>Move, gather, build or attack</dd>
               <dt>Shift + click</dt><dd>Add to selection; place several buildings</dd>
               <dt>Shift + right click</dt><dd>Queue orders (waypoints, tree then sheep)</dd>
-              <dt>Z X C V B</dt><dd>Command buttons. Soldiers: line, block, box, attack-move, stop</dd>
-              <dt>2x click building</dt><dd>Select all of that kind; train in each</dd>
+              <dt>Z X C V B</dt><dd>Command buttons. Soldiers: line, block, box, Hostile, Stand down</dd>
+              <dt>Double click building</dt><dd>Select all of that kind; train in each</dd>
               <dt>Right click, building</dt><dd>Set its rally point</dd>
             </dl>
             <dl>

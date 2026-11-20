@@ -549,6 +549,27 @@ export function foundationSprite(size: number): HTMLCanvasElement {
 
 /** A 16 x 16 icon for the HUD. */
 export function iconFor(type: string, team = 0): HTMLCanvasElement {
+  if (type === 'hostile-on' || type === 'hostile-off' || type === 'standdown') {
+    return make(`icon:${type}`, 16, 16, (px) => {
+      if (type === 'standdown') {
+        // white flag
+        px(4, 2, 1, 13, PAL.wood);
+        px(5, 2, 8, 6, PAL.white);
+        px(5, 7, 8, 1, PAL.silver);
+        px(12, 3, 1, 4, PAL.silver);
+        return;
+      }
+      // crossed swords, red when on
+      const blade = type === 'hostile-on' ? PAL.white : PAL.gray;
+      for (let i = 0; i < 10; i++) {
+        px(3 + i, 2 + i, 1, 1, blade);
+        px(12 - i, 2 + i, 1, 1, blade);
+      }
+      px(2, 11, 3, 3, type === 'hostile-on' ? PAL.yellow : PAL.slate);
+      px(11, 11, 3, 3, type === 'hostile-on' ? PAL.yellow : PAL.slate);
+      if (type === 'hostile-on') px(7, 6, 2, 2, PAL.red);
+    });
+  }
   if (type.startsWith('form-')) {
     return make(`icon:${type}`, 16, 16, (px) => {
       const dots: [number, number][] = [];
