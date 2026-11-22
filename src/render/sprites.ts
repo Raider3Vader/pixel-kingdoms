@@ -553,6 +553,10 @@ export function farmSprite(level: number, team: number): HTMLCanvasElement {
   return Sakura.farmSprite(level, team);
 }
 
+export function fishSprite(level: number, frame: number): HTMLCanvasElement {
+  return Sakura.fishSprite(level, frame);
+}
+
 export function mineSprite(kind: string, level: number): HTMLCanvasElement {
   return Sakura.mineSprite(kind, level);
 }
@@ -639,7 +643,8 @@ export function iconFor(type: string, team = 0, tier = 0): HTMLCanvasElement {
       if (type === 'form-box') px(7, 7, 2, 2, PAL.yellow);
     });
   }
-  if (type === 'villager' || type === 'swordsman' || type === 'spearman' || type === 'archer' || type === 'cavalry' || type === 'scout') return unitSprite(type, team, 'idle', 0, '', tier);
+  if (['villager', 'swordsman', 'spearman', 'archer', 'cavalry', 'scout', 'samurai', 'fishingBoat', 'warBoat'].includes(type)) return unitSprite(type, team, 'idle', 0, '', tier);
+  if (type === 'fish') return fishSprite(3, 0);
   if (type === 'tree') return treeSprite(0);
   if (type === 'berries') return berrySprite(6);
   if (type === 'sheep') return sheepSprite(0);

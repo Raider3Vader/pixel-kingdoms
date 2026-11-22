@@ -310,6 +310,76 @@ function market(px: Px, team: number): void {
   roof3q(px, 21, 20, 12, 25, 8, 3, c, true);
 }
 
+/** A slender five-storey pagoda (taller and thinner than the Town Center's), where Samurai train. */
+function pagoda5(px: Px, team: number, H: number): void {
+  const c = ROOF[team];
+  const cx = 20;
+  px(5, H - 6, 32, 4, SH);
+  base3q(px, 7, H - 12, 26, 7, 4);
+  px(15, H - 6, 10, 2, JP.stoneL);
+  let y = H - 12;
+  for (let i = 0; i < 5; i++) {
+    const bw = 18 - i * 2;
+    const bh = i === 0 ? 9 : 5;
+    const bx = cx - Math.floor(bw / 2);
+    wall3q(px, bx, y - bh, bw, bh, 2, JP.woodL, JP.wood);
+    px(bx, y - bh, 1, bh, JP.vermil);
+    px(bx + bw - 1, y - bh, 1, bh, JP.vermil);
+    px(bx + 1, y - bh, bw - 2, 1, JP.vermilD);
+    if (i === 0) {
+      // the door, and the team's banner beside it
+      px(cx - 3, y - 7, 6, 7, '#3a2418');
+      px(cx - 2, y - 6, 4, 6, JP.vermilD);
+      px(cx - 1, y - 5, 2, 2, JP.gold);
+    } else {
+      px(cx - 1, y - bh + 1, 2, bh - 1, '#3a2418');
+      for (let x = bx + 2; x < bx + bw - 2; x += 2) px(x, y - bh + 1, 1, 1, JP.gold);
+    }
+    const half = Math.round(bw / 2 + 6 - i * 0.4);
+    const rh = i === 0 ? 6 : 5;
+    const eave = y - bh - 1;
+    roof3q(px, cx, half, eave - rh, eave, 1, 2, c);
+    // a tiny bell hangs from each corner
+    px(cx - half + 1, eave + 1, 1, 2, JP.gold);
+    px(cx + half - 1, eave + 1, 1, 2, JP.gold);
+    y = eave - rh + 2;
+  }
+  // the bronze spire with its nine rings
+  px(cx, y - 13, 1, 13, JP.goldD);
+  for (let r = 0; r < 5; r++) px(cx - 1, y - 3 - r * 2, 3, 1, JP.gold);
+  px(cx - 1, y - 15, 3, 2, JP.gold);
+  px(cx, y - 16, 1, 1, '#fff2b0');
+  nobori(px, 1, H - 34, 26, TEAMS[team]);
+}
+
+/** A wooden landing stage on the shore with a boathouse, rope and a lantern. */
+function dock(px: Px, team: number): void {
+  const c = ROOF[team];
+  const t = TEAMS[team];
+  px(2, 41, 38, 3, SH);
+  // the deck, with posts down into the water
+  px(2, 30, 36, 10, JP.woodL);
+  for (let y = 31; y < 40; y += 2) px(2, y, 36, 1, JP.wood);
+  for (let x = 2; x < 38; x += 7) px(x, 31, 1, 9, JP.woodD);
+  for (const x of [3, 13, 23, 33]) px(x, 40, 2, 3, JP.woodD);
+  px(2, 30, 36, 1, '#b07a52');
+  // the boathouse
+  wall3q(px, 6, 17, 18, 13, 4, JP.plaster, JP.plasterD);
+  for (const x of [6, 15, 23]) px(x, 17, 1, 13, JP.wood);
+  px(9, 21, 10, 9, '#3a2418');
+  noren(px, 9, 21, 10, t);
+  roof3q(px, 16, 13, 8, 16, 5, 2, c, true);
+  // coils of rope, a barrel of fish and a red lantern on a post
+  disc(px, 29, 33, 2.5, JP.straw);
+  disc(px, 29, 33, 1, JP.strawD);
+  px(32, 30, 4, 5, JP.wood);
+  px(32, 30, 4, 1, JP.woodL);
+  px(33, 29, 2, 1, '#9fc6e0');
+  px(36, 20, 1, 11, JP.woodD);
+  px(35, 21, 3, 4, JP.vermil);
+  px(35, 22, 3, 1, JP.vermilD);
+}
+
 /** Wall piece joined to its neighbours (mask bits: 1 north, 2 east, 4 south, 8 west). */
 function wallPiece(px: Px, mask: number, stone: boolean, team: number): void {
   const g = 18; // ground line inside the tile
@@ -482,6 +552,8 @@ export function buildingSprite(type: string, team: number, variant = 0): HTMLCan
   if (type === 'market') return make(`mk:${team}`, 44, 50, (px) => market(px, team));
   if (type === 'stable') return make(`stable:${team}`, 50, 50, (px) => stable(px, team));
   if (type === 'townCenter') return make(`tc:${team}`, 58, 86, (px) => pagoda(px, team, 86));
+  if (type === 'pagoda') return make(`pg:${team}`, 40, 84, (px) => pagoda5(px, team, 84));
+  if (type === 'dock') return make(`dk:${team}`, 40, 44, (px) => dock(px, team));
   const w = type === 'barracks' ? 44 : 42;
   return make(`b:${type}:${team}`, w, 50, (px) => {
     if (type === 'house') house(px, team);
@@ -846,10 +918,114 @@ function armored(px: Px, t: Team3, pose: Pose, frame: number): void {
   }
 }
 
+/** A samurai in black lacquered armour laced in the team colour, a great gold crest, a red mask and a katana. */
+function samurai(px: Px, t: Team3, pose: Pose, frame: number, elite: boolean): void {
+  const o = 1;
+  px(o + 3, 15, 10, 2, SH);
+  // sashimono banner on the back: team colour with a white sun
+  px(o + 3, 0, 1, 9, JP.woodD);
+  px(o + 0, 0, 3, 6, t.m);
+  px(o + 1, 2, 1, 2, JP.plaster);
+  feet(px, o, pose, frame);
+  px(o + 5, 7, 6, 5, JP.black);
+  px(o + 5, 8, 6, 1, t.l);
+  px(o + 5, 10, 6, 1, t.m);
+  px(o + 6, 9, 1, 1, t.m);
+  px(o + 9, 9, 1, 1, t.m);
+  px(o + 4, 7, 2, 3, JP.blackL);
+  px(o + 4, 8, 2, 1, t.m);
+  if (elite) px(o + 5, 11, 6, 1, JP.gold);
+  px(o + 6, 4, 4, 3, JP.skin);
+  px(o + 9, 4, 1, 1, JP.ol);
+  px(o + 7, 6, 3, 1, JP.vermil); // menpo face mask
+  px(o + 5, 2, 6, 2, JP.black);
+  px(o + 4, 3, 2, 3, JP.black);
+  px(o + 7, 2, 2, 1, JP.blackL);
+  // kuwagata: the tall golden V crest
+  px(o + 5, 0, 1, 2, JP.gold);
+  px(o + 10, 0, 1, 2, JP.gold);
+  px(o + 6, 1, 1, 1, JP.gold);
+  px(o + 9, 1, 1, 1, JP.gold);
+  px(o + 7, 1, 2, 1, elite ? JP.vermil : JP.goldD);
+  if (pose === 'attack' && frame === 1) {
+    // a level cut with a white flash
+    px(o + 10, 8, 2, 2, JP.skin);
+    px(o + 12, 8, 5, 1, JP.blade);
+    px(o + 11, 8, 1, 1, JP.gold);
+    px(o + 14, 6, 2, 1, '#ffffff');
+    px(o + 16, 7, 1, 1, '#ffffff');
+  } else {
+    // katana held high in both hands
+    px(o + 10, 8, 2, 2, JP.skin);
+    px(o + 11, 7, 1, 1, JP.gold);
+    for (let k = 0; k < 6; k++) px(o + 12 + Math.floor(k / 2), 6 - k, 1, 1, JP.blade);
+  }
+}
+
+/** A small fishing boat: a sampan with a fisherman in a straw hat, a pole and a net. */
+function fishingBoat(px: Px, t: Team3): void {
+  px(3, 12, 19, 2, 'rgba(10,30,60,0.35)');
+  px(2, 9, 20, 3, JP.wood);
+  px(1, 8, 22, 1, JP.woodL);
+  px(3, 12, 17, 1, JP.woodD);
+  px(21, 6, 2, 3, JP.woodL);
+  px(22, 5, 1, 1, JP.woodL);
+  px(1, 7, 2, 2, JP.woodL);
+  px(4, 10, 15, 1, t.m);
+  // the net heaped at the stern
+  px(3, 6, 5, 2, JP.shojiL);
+  px(4, 6, 1, 1, JP.straw);
+  px(6, 7, 1, 1, JP.straw);
+  // the fisherman
+  px(10, 4, 4, 4, t.m);
+  px(10, 4, 1, 4, t.d);
+  px(11, 2, 3, 2, JP.skin);
+  px(13, 2, 1, 1, JP.ol);
+  px(9, 1, 7, 1, JP.straw);
+  px(10, 0, 5, 1, JP.strawD);
+  px(14, 5, 2, 1, JP.skin);
+  px(16, 0, 1, 8, JP.woodD);
+}
+
+/** A war boat: a junk with a ribbed sail in the team colour, shields along the side and an archer at the bow. */
+function warBoat(px: Px, t: Team3, heavy: boolean): void {
+  px(3, 23, 26, 2, 'rgba(10,30,60,0.35)');
+  px(2, 17, 27, 5, JP.woodD);
+  px(1, 16, 29, 1, JP.woodL);
+  px(3, 22, 24, 1, '#2a1a12');
+  px(27, 13, 3, 4, JP.woodD);
+  px(28, 12, 2, 1, JP.woodL);
+  px(1, 12, 6, 4, JP.wood);
+  px(1, 11, 6, 1, JP.woodL);
+  for (let x = 5; x < 26; x += 4) {
+    px(x, 17, 3, 3, heavy ? JP.blackL : t.m);
+    px(x + 1, 18, 1, 1, heavy ? JP.gold : t.l);
+  }
+  // mast and sail
+  px(15, 0, 1, 17, JP.woodD);
+  px(10, 1, 11, 13, t.m);
+  px(10, 1, 11, 1, t.l);
+  for (let y = 4; y < 14; y += 3) px(10, y, 11, 1, t.d);
+  px(10, 1, 1, 13, t.d);
+  px(14, 6, 3, 3, JP.plaster);
+  // archer at the bow
+  px(22, 11, 3, 5, t.d);
+  px(22, 9, 3, 2, JP.skin);
+  px(22, 8, 3, 1, JP.black);
+  px(25, 8, 1, 7, JP.woodL);
+  if (heavy) {
+    px(2, 9, 4, 2, t.d); // a cabin roof on the stern castle
+    px(1, 8, 6, 1, JP.gold);
+  }
+}
+
 /** `tier` is the owner's age: 0 Dark, 1 Feudal, 2 Imperial. Soldiers look tougher each age. */
 export function unitSprite(type: string, team: number, pose: Pose, frame: number, carry: string, tier = 0): HTMLCanvasElement {
   const t = TEAMS[team] ?? TEAMS[2];
   if (type === 'scout') return make(`u:scout:${team}:${pose}:${frame}`, 20, 18, (px) => scout(px, t, pose, frame));
+  if (type === 'fishingBoat') return make(`u:fboat:${team}`, 24, 15, (px) => fishingBoat(px, t));
+  if (type === 'warBoat') return make(`u:wboat:${team}:${tier >= 2 ? 1 : 0}`, 31, 26, (px) => warBoat(px, t, tier >= 2));
+  if (type === 'samurai') return make(`u:sam:${team}:${pose}:${frame}:${tier >= 2 ? 1 : 0}`, 18, 18, (px) => samurai(px, t, pose, frame, tier >= 2));
   if (type === 'cavalry' && tier >= 2) return make(`u:hcav:${team}:${pose}:${frame}`, 22, 19, (px) => armored(px, t, pose, frame));
   if (type === 'cavalry') return make(`u:cav:${team}:${pose}:${frame}`, 20, 18, (px) => cavalry(px, t, pose, frame));
   const k = type === 'villager' ? 0 : tier;
@@ -863,6 +1039,18 @@ export function unitSprite(type: string, team: number, pose: Pose, frame: number
 
 export function corpseSprite(type: string, team: number): HTMLCanvasElement {
   const t = TEAMS[team] ?? TEAMS[2];
+  if (type === 'fishingBoat' || type === 'warBoat') {
+    // a wreck: broken planks and a torn sail on the water
+    return make(`c:wreck:${type}:${team}`, 24, 14, (px) => {
+      px(2, 9, 8, 2, JP.wood);
+      px(12, 10, 9, 2, JP.woodD);
+      px(7, 6, 5, 2, JP.woodL);
+      px(15, 7, 1, 3, JP.woodD);
+      if (type === 'warBoat') px(16, 5, 6, 3, t.m);
+      px(4, 12, 3, 1, '#9fc6e0');
+      px(17, 12, 4, 1, '#9fc6e0');
+    });
+  }
   const horse = type === 'cavalry' || type === 'scout';
   return make(`c:${type}:${team}`, horse ? 20 : 18, 18, (px) => {
     if (horse) {
@@ -955,3 +1143,26 @@ export function berrySprite(level: number): HTMLCanvasElement {
 
 /** Petals and pebbles sprinkled over the grass. */
 export const GROUND_SPECKS = [JP.pink, JP.pinkL, JP.pinkD];
+
+/** A shoal of fish under the water: dark shapes, a glint and ripples. Fewer fish as it is caught. */
+export function fishSprite(level: number, frame: number): HTMLCanvasElement {
+  return make(`fish:${level}:${frame}`, 16, 16, (px) => {
+    const spots: [number, number][] = [
+      [3, 5],
+      [9, 3],
+      [7, 10],
+      [11, 8],
+    ];
+    spots.slice(0, Math.max(1, level)).forEach(([x, y], i) => {
+      const dx = (frame + i) % 2;
+      px(x + dx, y, 4, 2, '#1d4a6e');
+      px(x + dx + 4, y, 1, 1, '#1d4a6e');
+      px(x + dx + 4, y + 1, 1, 1, '#1d4a6e');
+      px(x + dx + 1, y, 1, 1, '#4f97bf');
+    });
+    // ripples on the surface
+    px(1 + frame, 13, 3, 1, '#8fc4e0');
+    px(10 - frame, 1, 3, 1, '#8fc4e0');
+    if (frame === 1) px(13, 12, 2, 1, '#cfe6f2');
+  }, false);
+}

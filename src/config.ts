@@ -4,7 +4,7 @@
 export type ResKind = 'food' | 'wood' | 'gold' | 'stone';
 export const RES_KINDS: ResKind[] = ['food', 'wood', 'gold', 'stone'];
 export type Cost = Partial<Record<ResKind, number>>;
-export type UnitType = 'villager' | 'swordsman' | 'spearman' | 'archer' | 'cavalry' | 'scout';
+export type UnitType = 'villager' | 'swordsman' | 'spearman' | 'archer' | 'cavalry' | 'scout' | 'samurai' | 'fishingBoat' | 'warBoat';
 export type BuildingType =
   | 'townCenter'
   | 'storehouse'
@@ -18,8 +18,10 @@ export type BuildingType =
   | 'stoneWall'
   | 'stoneGate'
   | 'watchTower'
-  | 'guardTower';
-export type ResourceType = 'berries' | 'sheep' | 'tree' | 'gold' | 'stone' | 'farm';
+  | 'guardTower'
+  | 'pagoda'
+  | 'dock';
+export type ResourceType = 'berries' | 'sheep' | 'tree' | 'gold' | 'stone' | 'farm' | 'fish';
 
 /** 0 = Dark Age, 1 = Feudal Age, 2 = Imperial Age. */
 export type Age = 0 | 1 | 2;
@@ -73,6 +75,7 @@ export const RESOURCES: Record<ResourceType, { name: string; kind: ResKind; gath
   gold: { name: 'Gold mine', kind: 'gold', gatherPerSec: 0.45, amount: 400 },
   stone: { name: 'Stone quarry', kind: 'stone', gatherPerSec: 0.45, amount: 350 },
   farm: { name: 'Rice paddy', kind: 'food', gatherPerSec: 0.5, amount: 300 },
+  fish: { name: 'Fish', kind: 'food', gatherPerSec: 0.7, amount: 225 },
 };
 
 /** Rice paddies replant themselves for this much when they run dry. */
@@ -125,6 +128,9 @@ export const BUILDINGS: Record<BuildingType, BuildingStats> = {
   stoneGate: B({ name: 'Stone gate', cost: { stone: 30 }, age: 1, buildSec: 15, size: 1, hp: 900, sight: 3, wall: true, gate: true }),
   watchTower: B({ name: 'Watch tower', cost: { wood: 60 }, buildSec: 25, size: 1, hp: 250, sight: 11 }),
   guardTower: B({ name: 'Guard tower', cost: { wood: 50, stone: 125 }, age: 1, buildSec: 45, size: 1, hp: 700, sight: 10, attack: 5, attackSec: 1.5, rangeTiles: 7, garrison: 5 }),
+  pagoda: B({ name: 'Pagoda', cost: { wood: 175, stone: 100 }, age: 1, buildSec: 50, size: 2, hp: 500, sight: 6, trains: ['samurai'] }),
+  // built on the shore; boats are trained here and fishing boats bring their catch back to it
+  dock: B({ name: 'Dock', cost: { wood: 120 }, buildSec: 35, size: 2, hp: 300, sight: 6, trains: ['fishingBoat', 'warBoat'] }),
 };
 
 /** Watch tower to guard tower, done at the tower. */
@@ -163,13 +169,15 @@ export interface UnitStats {
   trainSec: number;
   sight: number; // tiles
   bonus: Partial<Record<UnitType, number>>; // extra damage vs these units
+  naval?: boolean; // sails on water instead of walking on land
   vsBuildings: number; // damage multiplier against buildings
   tiers: [Tier, Tier, Tier]; // stats in the Dark, Feudal and Imperial Ages
 }
 
 const same = (t: Tier): [Tier, Tier, Tier] => [t, t, t];
 
-export const UNITS: Record<UnitType, UnitStats> = {
+// samurai and the boats are added just below
+export const UNITS = {
   villager: { name: 'Villager', cost: { food: 50 }, age: 0, rangeTiles: 0, speed: 1.6, trainSec: 10, sight: 5, bonus: {}, vsBuildings: 1, tiers: same({ name: 'Villager', hp: 25, attack: 2, attackSec: 1.5, armor: 0, arrowArmor: 0 }) },
   swordsman: {
     name: 'Sword line',
@@ -251,6 +259,54 @@ export const UNITS: Record<UnitType, UnitStats> = {
       { name: 'Scout', hp: 60, attack: 5, attackSec: 1.0, armor: 1, arrowArmor: 1 },
     ],
   },
+} as Record<UnitType, UnitStats>;
+
+UNITS.samurai = {
+  name: 'Samurai',
+  cost: { food: 65, gold: 45 },
+  age: 1,
+  rangeTiles: 0,
+  speed: 1.5,
+  trainSec: 18,
+  sight: 6,
+  // a master swordsman: quick, hard-hitting blows that cut down other foot soldiers
+  bonus: { swordsman: 3, spearman: 3, archer: 3 },
+  vsBuildings: 1.2,
+  tiers: [
+    { name: 'Samurai', hp: 60, attack: 8, attackSec: 0.8, armor: 1, arrowArmor: 1 },
+    { name: 'Samurai', hp: 60, attack: 8, attackSec: 0.8, armor: 1, arrowArmor: 1 },
+    { name: 'Elite Samurai', hp: 80, attack: 10, attackSec: 0.75, armor: 2, arrowArmor: 3 },
+  ],
+};
+UNITS.fishingBoat = {
+  name: 'Fishing boat',
+  cost: { wood: 60 },
+  age: 0,
+  rangeTiles: 0,
+  speed: 1.8,
+  trainSec: 18,
+  sight: 5,
+  bonus: {},
+  vsBuildings: 0,
+  naval: true,
+  tiers: same({ name: 'Fishing boat', hp: 60, attack: 0, attackSec: 1, armor: 0, arrowArmor: 2 }),
+};
+UNITS.warBoat = {
+  name: 'War boat',
+  cost: { wood: 90, gold: 30 },
+  age: 1,
+  rangeTiles: 5,
+  speed: 2.0,
+  trainSec: 25,
+  sight: 7,
+  bonus: { fishingBoat: 4, warBoat: 2 },
+  vsBuildings: 1,
+  naval: true,
+  tiers: [
+    { name: 'War boat', hp: 110, attack: 6, attackSec: 1.4, armor: 1, arrowArmor: 2 },
+    { name: 'War boat', hp: 110, attack: 6, attackSec: 1.4, armor: 1, arrowArmor: 2 },
+    { name: 'Heavy war boat', hp: 150, attack: 7, attackSec: 1.2, armor: 2, arrowArmor: 3, rangeTiles: 6 },
+  ],
 };
 
 /** Archers fighting an enemy right next to them do this share of their damage. */
@@ -313,8 +369,8 @@ export interface Opening {
   towers: number; // guard towers it builds once in the Feudal Age
 }
 export const OPENINGS: Record<OpeningKey, Opening> = {
-  boom: { name: 'Boom', foodShare: 0.55, barracksAtVillagers: 18, feudalAtVillagers: 16, imperialAtVillagers: 26, earlyVillagerCap: null, maxStorehouses: 3, mix: { swordsman: 2, spearman: 1, archer: 2, cavalry: 1 }, mixAfter: { swordsman: 2, spearman: 1, archer: 2, cavalry: 2 }, firstAttackSize: 12, attackGrow: 3, towers: 2 },
-  rush: { name: 'Rush', foodShare: 0.6, barracksAtVillagers: 7, feudalAtVillagers: 13, imperialAtVillagers: 24, earlyVillagerCap: 10, maxStorehouses: 1, mix: { swordsman: 2, spearman: 1 }, mixAfter: { swordsman: 2, spearman: 1, archer: 1 }, firstAttackSize: 4, attackGrow: 2, towers: 0 },
+  boom: { name: 'Boom', foodShare: 0.55, barracksAtVillagers: 18, feudalAtVillagers: 16, imperialAtVillagers: 26, earlyVillagerCap: null, maxStorehouses: 3, mix: { swordsman: 2, spearman: 1, archer: 2, cavalry: 1 }, mixAfter: { swordsman: 2, spearman: 1, archer: 2, cavalry: 2, samurai: 2 }, firstAttackSize: 12, attackGrow: 3, towers: 2 },
+  rush: { name: 'Rush', foodShare: 0.6, barracksAtVillagers: 7, feudalAtVillagers: 13, imperialAtVillagers: 24, earlyVillagerCap: 10, maxStorehouses: 1, mix: { swordsman: 2, spearman: 1 }, mixAfter: { swordsman: 2, spearman: 1, archer: 1, samurai: 1 }, firstAttackSize: 4, attackGrow: 2, towers: 0 },
   archers: { name: 'Archer line', foodShare: 0.5, barracksAtVillagers: 9, feudalAtVillagers: 11, imperialAtVillagers: 24, earlyVillagerCap: null, maxStorehouses: 2, mix: { archer: 3, spearman: 1 }, mixAfter: { archer: 2, swordsman: 1, cavalry: 1 }, firstAttackSize: 7, attackGrow: 3, towers: 1 },
   horseRaid: { name: 'Horse raid', foodShare: 0.65, barracksAtVillagers: 9, feudalAtVillagers: 11, imperialAtVillagers: 24, earlyVillagerCap: null, maxStorehouses: 2, mix: { cavalry: 1 }, mixAfter: { cavalry: 2, spearman: 1, archer: 1 }, firstAttackSize: 4, attackGrow: 2, towers: 0 },
 };

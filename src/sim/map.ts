@@ -2,7 +2,7 @@
 
 import { ECONOMY } from '../config';
 import { findPath } from './path';
-import { ENEMY, PLAYER, T, World, spawnBuilding, spawnResource, spawnUnit, type Entity } from './world';
+import { ENEMY, PLAYER, T, World, sailable, spawnBuilding, spawnFish, spawnResource, spawnUnit, type Entity } from './world';
 
 export const PLAYER_TC = { tx: 6, ty: 6 };
 
@@ -438,6 +438,54 @@ export function createMatch(seed: number, opts: { river?: RiverKind; map?: MapKi
     }
     w.resources = w.resources.filter((r) => !r.dead);
     for (const [id, e] of w.ents) if (e.dead) w.ents.delete(id);
+  }
+
+  // fish: small shoals in open water (boats from a Dock catch them), mirrored for fairness
+  {
+    const open = (x: number, y: number): boolean => {
+      const i = y * N + x;
+      if (!w.water[i] || w.blocked[i] !== 3) return false;
+      for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) if (!sailable(w, x + dx, y + dy)) return false;
+      return true;
+    };
+    const nearLand = (x: number, y: number, r: number): boolean => {
+      for (let dy = -r; dy <= r; dy++) for (let dx = -r; dx <= r; dx++) if (w.inBounds(x + dx, y + dy) && !w.water[(y + dy) * N + x + dx] && !w.bridge[(y + dy) * N + x + dx]) return true;
+      return false;
+    };
+    // water within 4 tiles of the home island (the land blob around the home corner)
+    const homeCoast = (x: number, y: number): boolean => {
+      for (let dy = -4; dy <= 4; dy++)
+        for (let dx = -4; dx <= 4; dx++) {
+          const qx = x + dx;
+          const qy = y + dy;
+          if (w.inBounds(qx, qy) && !w.water[qy * N + qx] && !w.bridge[qy * N + qx] && Math.hypot(qx - 14, qy - 14) < 30) return true;
+        }
+      return false;
+    };
+    const shoals: [number, number][] = [];
+    const tryShoal = (near: boolean): boolean => {
+      for (let tries = 0; tries < 400; tries++) {
+        const x = 2 + Math.floor(rand() * (N - 4));
+        const y = 2 + Math.floor(rand() * (N - 4));
+        if (x + y > N - 4) continue; // the top-left half; mirrored below
+        if (!open(x, y) || !open(x + 1, y) || !nearLand(x, y, 5)) continue;
+        const d = Math.hypot(x - PLAYER_TC.tx, y - PLAYER_TC.ty);
+        if (near ? d > 40 || !homeCoast(x, y) : d < 30) continue; // near shoals lie off your own island's coast
+        if (shoals.some(([a, b]) => Math.hypot(a - x, b - y) < 8)) continue;
+        shoals.push([x, y]);
+        for (const [fx, fy] of [[x, y], [x + 1, y]]) {
+          spawnFish(w, fx, fy);
+          const [mx, my] = mirror(w, fx, fy);
+          spawnFish(w, mx, my);
+        }
+        return true;
+      }
+      return false;
+    };
+    const nearCount = sea ? 3 : 1;
+    const farCount = sea ? 6 : 2;
+    for (let k = 0; k < nearCount; k++) tryShoal(true);
+    for (let k = 0; k < farCount; k++) tryShoal(false);
   }
 
   // starting villagers stand east of each Town Center

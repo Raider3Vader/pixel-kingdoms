@@ -269,7 +269,7 @@ function blank(w: World, kind: Kind, type: string, team: number, x: number, y: n
 
 export function spawnUnit(w: World, type: UnitType, team: number, x: number, y: number): Entity {
   const e = blank(w, 'unit', type, team, x, y, unitStats(type, w.teams[team]?.age ?? 0).hp);
-  e.hostile = type !== 'villager' && type !== 'scout';
+  e.hostile = type !== 'villager' && type !== 'scout' && type !== 'fishingBoat';
   w.ents.set(e.id, e);
   w.units.push(e);
   return e;
@@ -284,6 +284,22 @@ export function spawnResource(w: World, type: ResourceType, tx: number, ty: numb
   w.ents.set(e.id, e);
   w.resources.push(e);
   const i = ty * w.w + tx;
+  w.blocked[i] = 1;
+  w.occ[i] = e.id;
+  return e;
+}
+
+/** Fish swim in open water: a resource on a water tile that only boats (or villagers on the shore) can reach. */
+export function spawnFish(w: World, tx: number, ty: number): Entity | null {
+  if (!w.inBounds(tx, ty)) return null;
+  const i = ty * w.w + tx;
+  if (!w.water[i] || w.blocked[i] !== 3 || w.occ[i]) return null;
+  const e = blank(w, 'resource', 'fish', NATURE, (tx + 0.5) * T, (ty + 0.5) * T, 1);
+  e.tx = tx;
+  e.ty = ty;
+  e.amount = e.startAmount = RESOURCES.fish.amount;
+  w.ents.set(e.id, e);
+  w.resources.push(e);
   w.blocked[i] = 1;
   w.occ[i] = e.id;
   return e;
@@ -320,7 +336,50 @@ export function spawnBuilding(w: World, type: BuildingType, team: number, tx: nu
 
 // ---------- queries ----------
 
-export const isSoldier = (e: Entity): boolean => e.kind === 'unit' && e.type !== 'villager';
+/** Villagers and fishing boats: they gather, and never go looking for a fight. */
+export const isWorker = (e: Entity): boolean => e.kind === 'unit' && (e.type === 'villager' || e.type === 'fishingBoat');
+export const isSoldier = (e: Entity): boolean => e.kind === 'unit' && !isWorker(e);
+/** Boats sail on water (and over shallow fords and sandbars) instead of walking. */
+export const isNaval = (e: Entity): boolean => e.kind === 'unit' && !!UNITS[e.type as UnitType]?.naval;
+
+/** Can a boat be on this tile? Open water, fords and sandbars, and under bridges. */
+export function sailable(w: World, tx: number, ty: number): boolean {
+  if (!w.inBounds(tx, ty)) return false;
+  const i = ty * w.w + tx;
+  if (w.water[i]) return w.blocked[i] === 3;
+  return w.bridge[i] !== 0 && w.blocked[i] === 0;
+}
+
+const navCache = new WeakMap<World, { t: number; grid: { w: number; h: number; blocked: Uint8Array } }>();
+/** A grid for boat pathfinding: 0 = sailable. Rebuilt at most once per tick. */
+export function navGrid(w: World): { w: number; h: number; blocked: Uint8Array } {
+  const c = navCache.get(w);
+  if (c && c.t === w.time) return c.grid;
+  const grid = c?.grid ?? { w: w.w, h: w.h, blocked: new Uint8Array(w.w * w.h) };
+  for (let ty = 0; ty < w.h; ty++) for (let tx = 0; tx < w.w; tx++) grid.blocked[ty * w.w + tx] = sailable(w, tx, ty) ? 0 : 1;
+  navCache.set(w, { t: w.time, grid });
+  return grid;
+}
+/** Is this tile closed to this unit? Boats need water; everyone else needs open land. */
+export function blockedFor(w: World, u: Entity, tx: number, ty: number): boolean {
+  return isNaval(u) ? !sailable(w, tx, ty) : w.isBlocked(tx, ty, u.team);
+}
+function gridOf(w: World, u: Entity): { w: number; h: number; blocked: Uint8Array } {
+  return isNaval(u) ? navGrid(w) : w;
+}
+function teamOf(u: Entity): number {
+  return isNaval(u) ? -1 : u.team;
+}
+function freeNear(w: World, u: Entity, tx: number, ty: number, r: number): Pt | null {
+  return nearestFree(gridOf(w, u), Math.max(0, Math.min(w.w - 1, tx)), Math.max(0, Math.min(w.h - 1, ty)), r, teamOf(u));
+}
+/** Can a attack b at all? Foot soldiers cannot reach boats out on the water. */
+function canFight(w: World, a: Entity, b: Entity): boolean {
+  const st = unitStats(a.type as UnitType, (w.teams[a.team]?.age ?? 0) as Age);
+  if (st.attack <= 0) return false;
+  if (b.kind === 'unit' && isNaval(b) && !isNaval(a) && st.rangeTiles === 0) return false;
+  return true;
+}
 
 export function tileOf(v: number): number {
   return Math.floor(v / T);
@@ -346,11 +405,12 @@ export function teamBuildings(w: World, team: number, type?: BuildingType, finis
   return w.buildings.filter((b) => !b.dead && b.team === team && (!type || b.type === type) && (!finishedOnly || b.progress >= 1));
 }
 
-export function nearestDropoff(w: World, team: number, x: number, y: number): Entity | null {
+export function nearestDropoff(w: World, team: number, x: number, y: number, naval = false): Entity | null {
   let best: Entity | null = null;
   let bd = Infinity;
   for (const b of w.buildings) {
-    if (b.dead || b.team !== team || b.progress < 1 || !BUILDINGS[b.type as BuildingType].dropoff) continue;
+    if (b.dead || b.team !== team || b.progress < 1) continue;
+    if (naval ? b.type !== 'dock' : !BUILDINGS[b.type as BuildingType].dropoff) continue;
     const d = distToEntity(x, y, b);
     if (d < bd) {
       bd = d;
@@ -383,7 +443,7 @@ export function freeFarm(w: World, team: number, x: number, y: number, maxDist =
 
 /** True if a resource has at least one open tile next to it (so it can be reached). */
 export function exposed(w: World, r: Entity): boolean {
-  for (let dy = -1; dy <= 1; dy++) for (let dx = -1; dx <= 1; dx++) if ((dx || dy) && !w.isBlocked(r.tx + dx, r.ty + dy)) return true;
+  for (let dy = -1; dy <= 1; dy++) for (let dx = -1; dx <= 1; dx++) if ((dx || dy) && (!w.isBlocked(r.tx + dx, r.ty + dy) || (r.type === 'fish' && sailable(w, r.tx + dx, r.ty + dy)))) return true;
   return false;
 }
 
@@ -444,7 +504,7 @@ export function shortOf(w: World, team: number, cost: Cost): ResKind | null {
   return RES_KINDS.find((k) => t[k] < (cost[k] ?? 0)) ?? null;
 }
 
-export type PlaceResult = 'ok' | 'blocked' | 'unexplored' | 'cost' | 'age';
+export type PlaceResult = 'ok' | 'blocked' | 'unexplored' | 'cost' | 'age' | 'shore';
 
 export function canPlace(w: World, team: number, type: BuildingType, tx: number, ty: number, requireExplored = true): PlaceResult {
   const s = BUILDINGS[type];
@@ -457,8 +517,16 @@ export function canPlace(w: World, team: number, type: BuildingType, tx: number,
       if (requireExplored && team < 2 && !w.explored[team][y * w.w + x]) return 'unexplored';
     }
   }
+  if (type === 'dock' && shoreTiles(w, tx, ty, s.size) < 2) return 'shore';
   if (!canAfford(w, team, s.cost)) return 'cost';
   return 'ok';
+}
+
+/** How many sailable tiles touch a footprint (a Dock needs water beside it). */
+export function shoreTiles(w: World, tx: number, ty: number, size: number): number {
+  let n = 0;
+  for (let y = ty - 1; y <= ty + size; y++) for (let x = tx - 1; x <= tx + size; x++) if ((x < tx || x >= tx + size || y < ty || y >= ty + size) && sailable(w, x, y)) n++;
+  return n;
 }
 
 /** Gates: an unlocked, finished gate lets its own side through. */
@@ -736,7 +804,7 @@ export function orderMove(w: World, units: Entity[], x: number, y: number, attac
     const cy = Math.floor(i / cols) - (Math.ceil(list.length / cols) - 1) / 2;
     let px = x + cx * spacing;
     let py = y + cy * spacing;
-    if (w.isBlocked(tileOf(px), tileOf(py))) {
+    if (blockedFor(w, u, tileOf(px), tileOf(py))) {
       px = x;
       py = y;
     }
@@ -750,8 +818,8 @@ export function placeFormation(w: World, list: Entity[], f: Formation, x: number
   const slowest = Math.min(...list.map((u) => UNITS[u.type as UnitType].speed));
   list.forEach((u, i) => {
     let { x: px, y: py } = pts[i];
-    if (w.isBlocked(tileOf(px), tileOf(py))) {
-      const free = nearestFree(w, Math.max(0, Math.min(w.w - 1, tileOf(px))), Math.max(0, Math.min(w.h - 1, tileOf(py))), 4);
+    if (blockedFor(w, u, tileOf(px), tileOf(py))) {
+      const free = freeNear(w, u, tileOf(px), tileOf(py), 4);
       if (free) {
         px = (free.x + 0.5) * T;
         py = (free.y + 0.5) * T;
@@ -779,7 +847,7 @@ export function orderFormation(w: World, units: Entity[], f: Formation): void {
 
 export function orderGather(w: World, units: Entity[], res: Entity): void {
   for (const u of units) {
-    if (u.type !== 'villager' || u.dead) continue;
+    if (u.dead || !(u.type === 'villager' || (u.type === 'fishingBoat' && res.type === 'fish'))) continue;
     setOrder(u, { type: 'gather', target: res.id, resType: res.type as ResourceType, phase: 'go', dropId: 0 });
   }
   void w;
@@ -809,10 +877,10 @@ export function smartOrder(w: World, units: Entity[], x: number, y: number, team
   const target = entityAt(w, x, y, (e) => canSee(e) && !(e.kind === 'unit' && e.team === team));
   if (target) {
     if (target.kind === 'resource') {
-      const vills = mine.filter((u) => u.type === 'villager');
+      const vills = mine.filter((u) => u.type === 'villager' || (u.type === 'fishingBoat' && target.type === 'fish'));
       if (vills.length) {
         orderGather(w, vills, target);
-        const rest = mine.filter((u) => u.type !== 'villager');
+        const rest = mine.filter((u) => !vills.includes(u));
         if (rest.length) orderMove(w, rest, x, y);
         return 'gather';
       }
@@ -907,8 +975,8 @@ function unstick(w: World, u: Entity): void {
   if (u.inside) return;
   const tx = tileOf(u.x);
   const ty = tileOf(u.y);
-  if (!w.isBlocked(tx, ty, u.team)) return;
-  const f = nearestFree(w, Math.max(0, Math.min(w.w - 1, tx)), Math.max(0, Math.min(w.h - 1, ty)), 12, u.team);
+  if (!blockedFor(w, u, tx, ty)) return;
+  const f = freeNear(w, u, tx, ty, 12);
   if (f) {
     u.x = (f.x + 0.5) * T;
     u.y = (f.y + 0.5) * T;
@@ -938,7 +1006,7 @@ function followPath(w: World, u: Entity, dt: number): boolean {
       const nx = u.x + (dx / d) * budget;
       const ny = u.y + (dy / d) * budget;
       // the way got blocked (a building went up, a gate locked): repath
-      if (w.isBlocked(tileOf(nx), tileOf(ny), u.team)) {
+      if (blockedFor(w, u, tileOf(nx), tileOf(ny))) {
         u.path = [];
         u.repathT = 0;
         return true;
@@ -962,8 +1030,8 @@ function pathToPoint(w: World, u: Entity, x: number, y: number): boolean {
   let gx = tileOf(x);
   let gy = tileOf(y);
   let exact = true;
-  if (w.isBlocked(gx, gy, u.team)) {
-    const f = nearestFree(w, Math.max(0, Math.min(w.w - 1, gx)), Math.max(0, Math.min(w.h - 1, gy)), 12, u.team);
+  if (blockedFor(w, u, gx, gy)) {
+    const f = freeNear(w, u, gx, gy, 12);
     if (!f) return false;
     gx = f.x;
     gy = f.y;
@@ -971,7 +1039,7 @@ function pathToPoint(w: World, u: Entity, x: number, y: number): boolean {
   }
   const sx = tileOf(u.x);
   const sy = tileOf(u.y);
-  const p = findPath(w, sx, sy, (tx, ty) => tx === gx && ty === gy, gx, gy, 12000, u.team);
+  const p = findPath(gridOf(w, u), sx, sy, (tx, ty) => tx === gx && ty === gy, gx, gy, 12000, teamOf(u));
   if (!p) return false;
   u.path = tileCenters(p);
   if (exact) {
@@ -982,14 +1050,23 @@ function pathToPoint(w: World, u: Entity, x: number, y: number): boolean {
 }
 
 /** Path to any free tile next to an entity's footprint. */
-function pathToEntity(w: World, u: Entity, e: Entity): boolean {
+function pathToEntity(w: World, u: Entity, e: Entity, reach = 0): boolean {
   const sx = tileOf(u.x);
   const sy = tileOf(u.y);
   let x0: number, y0: number, x1: number, y1: number;
+  const grid = gridOf(w, u);
+  const team = teamOf(u);
+  // shooting across water (a boat at anything, or anyone at a boat): get within range, not next to it
+  if (reach > 2 * T && (isNaval(u) || (e.kind === 'unit' && isNaval(e)))) {
+    const p = findPath(grid, sx, sy, (tx, ty) => !blockedFor(w, u, tx, ty) && distToEntity((tx + 0.5) * T, (ty + 0.5) * T, e) <= reach - 3, tileOf(e.x), tileOf(e.y), 12000, team);
+    if (!p) return false;
+    u.path = tileCenters(p);
+    return true;
+  }
   if (e.kind === 'unit') {
     const ex = tileOf(e.x);
     const ey = tileOf(e.y);
-    const p = findPath(w, sx, sy, (tx, ty) => Math.abs(tx - ex) <= 1 && Math.abs(ty - ey) <= 1, ex, ey, 4000, u.team);
+    const p = findPath(grid, sx, sy, (tx, ty) => Math.abs(tx - ex) <= 1 && Math.abs(ty - ey) <= 1, ex, ey, 4000, team);
     if (!p) return false;
     u.path = tileCenters(p);
     return true;
@@ -999,14 +1076,14 @@ function pathToEntity(w: World, u: Entity, e: Entity): boolean {
   x1 = e.tx + e.size - 1;
   y1 = e.ty + e.size - 1;
   const p = findPath(
-    w,
+    grid,
     sx,
     sy,
-    (tx, ty) => tx >= x0 - 1 && tx <= x1 + 1 && ty >= y0 - 1 && ty <= y1 + 1 && !(tx >= x0 && tx <= x1 && ty >= y0 && ty <= y1) && !w.isBlocked(tx, ty, u.team),
+    (tx, ty) => tx >= x0 - 1 && tx <= x1 + 1 && ty >= y0 - 1 && ty <= y1 + 1 && !(tx >= x0 && tx <= x1 && ty >= y0 && ty <= y1) && !blockedFor(w, u, tx, ty),
     tileOf(e.x),
     tileOf(e.y),
     12000,
-    u.team,
+    team,
   );
   if (!p) return false;
   u.path = tileCenters(p);
@@ -1023,9 +1100,9 @@ function approach(w: World, u: Entity, e: Entity, reach: number, dt: number): 't
   const moved = e.kind === 'unit' && Math.hypot(e.x - u.goalX, e.y - u.goalY) > T;
   if (u.path.length === 0 || (moved && u.repathT <= 0)) {
     // close to a unit in the open: walk straight at it
-    if (e.kind === 'unit' && Math.hypot(e.x - u.x, e.y - u.y) < 3 * T) {
+    if (e.kind === 'unit' && Math.hypot(e.x - u.x, e.y - u.y) < 3 * T && isNaval(e) === isNaval(u)) {
       u.path = [{ x: e.x, y: e.y }];
-    } else if (!pathToEntity(w, u, e)) {
+    } else if (!pathToEntity(w, u, e, reach)) {
       return 'stuck';
     } else if (u.path.length === 0) {
       // already on a tile next to it: step toward its nearest edge
@@ -1060,16 +1137,20 @@ function reachFor(w: World, u: Entity): number {
 function findEnemyNear(w: World, u: Entity, radius: number): Entity | null {
   let best: Entity | null = null;
   let bd = radius;
+  const reach = reachFor(w, u);
   for (const o of w.units) {
     if (o.dead || o.inside || o.team === u.team || o.team === NATURE) continue;
+    if (!canFight(w, u, o)) continue;
     const d = Math.hypot(o.x - u.x, o.y - u.y);
+    // across the water line, only go for what is already (nearly) in range
+    if (isNaval(o) !== isNaval(u) && d > reach + T) continue;
     if (d < bd) {
       bd = d;
       best = o;
     }
   }
   if (best) return best;
-  bd = radius;
+  bd = isNaval(u) ? Math.min(radius, reach + T) : radius;
   for (const b of w.buildings) {
     if (b.dead || b.team === u.team) continue;
     const d = distToEntity(u.x, u.y, b);
@@ -1111,7 +1192,8 @@ function damage(w: World, attacker: Entity, target: Entity, amount: number): voi
     }
   }
   // a hit villager or idle soldier fights back
-  if (!target.dead && target.kind === 'unit' && target.order.type === 'idle' && attacker.kind === 'unit') {
+  // (fishing boats have nothing to fight with, and foot soldiers cannot reach a boat)
+  if (!target.dead && target.kind === 'unit' && target.order.type === 'idle' && attacker.kind === 'unit' && canFight(w, target, attacker)) {
     setOrder(target, { type: 'attack', target: attacker.id, after: null });
   }
 }
@@ -1130,7 +1212,7 @@ export function kill(w: World, e: Entity, deleted = false): void {
         const i = y * w.w + x;
         if (w.occ[i] === e.id) {
           w.occ[i] = 0;
-          w.blocked[i] = 0;
+          w.blocked[i] = w.water[i] ? 3 : 0; // fished-out water stays water
         }
       }
     }
@@ -1182,18 +1264,21 @@ function attackStep(w: World, u: Entity, dt: number): void {
 
 function gatherStep(w: World, u: Entity, dt: number): void {
   const o = u.order as Extract<Order, { type: 'gather' }>;
-  const cap = ECONOMY.carryCapacity;
+  const naval = isNaval(u);
+  const cap = naval ? ECONOMY.carryCapacity * 2 : ECONOMY.carryCapacity; // a boat's hold carries more
   const kind = RESOURCES[o.resType].kind;
 
   const findReplacement = (fromX: number, fromY: number): Entity | null =>
-    o.resType === 'farm'
-      ? freeFarm(w, u.team, fromX, fromY, 10 * T)
-      : nearestResource(w, fromX, fromY, (r) => r.type === o.resType, 10 * T) ?? nearestResource(w, fromX, fromY, (r) => RESOURCES[r.type as ResourceType].kind === kind, 10 * T);
+    naval
+      ? nearestResource(w, fromX, fromY, (r) => r.type === 'fish', 16 * T)
+      : o.resType === 'farm'
+        ? freeFarm(w, u.team, fromX, fromY, 10 * T)
+        : nearestResource(w, fromX, fromY, (r) => r.type === o.resType, 10 * T) ?? nearestResource(w, fromX, fromY, (r) => r.type !== 'fish' && RESOURCES[r.type as ResourceType].kind === kind, 10 * T);
 
   if (o.phase === 'drop') {
     let drop = w.get(o.dropId);
     if (!drop || drop.progress < 1) {
-      drop = nearestDropoff(w, u.team, u.x, u.y) ?? undefined;
+      drop = nearestDropoff(w, u.team, u.x, u.y, naval) ?? undefined;
       if (!drop) {
         setOrder(u, { type: 'idle' });
         return;
@@ -1451,7 +1536,7 @@ export function ungarrison(w: World, b: Entity): void {
 }
 
 export function orderGarrison(w: World, units: Entity[], b: Entity): void {
-  for (const u of units) if (u.kind === 'unit' && u.type !== 'villager' && u.team === b.team && !u.dead) setOrder(u, { type: 'garrison', target: b.id });
+  for (const u of units) if (u.kind === 'unit' && isSoldier(u) && !isNaval(u) && u.team === b.team && !u.dead) setOrder(u, { type: 'garrison', target: b.id });
   void w;
 }
 
@@ -1471,7 +1556,7 @@ function updateUnit(w: World, u: Entity, dt: number): void {
   u.anim = 'idle';
   if (u.order.type === 'idle' && u.pending.length) setOrder(u, u.pending.shift()!);
   const o = u.order;
-  const soldier = u.type !== 'villager';
+  const soldier = !isWorker(u);
   const sight = UNITS[u.type as UnitType].sight * T;
 
   // Hostile soldiers go after any enemy in sight, even while marching.
@@ -1537,7 +1622,7 @@ function separate(w: World): void {
     if (a.dead || a.inside) continue;
     for (let j = i + 1; j < us.length; j++) {
       const b = us[j];
-      if (b.dead || b.inside) continue;
+      if (b.dead || b.inside || isNaval(a) !== isNaval(b)) continue;
       // walkers pass through each other; only units standing still are nudged
       if (a.anim !== 'idle' && b.anim !== 'idle') continue;
       const dx = b.x - a.x;
@@ -1557,11 +1642,11 @@ function separate(w: World): void {
       const ay = a.y - ny * push * 2 * (aw / tot);
       const bx = b.x + nx * push * 2 * (bw / tot);
       const by = b.y + ny * push * 2 * (bw / tot);
-      if (!w.isBlocked(tileOf(ax), tileOf(ay), a.team)) {
+      if (!blockedFor(w, a, tileOf(ax), tileOf(ay))) {
         a.x = ax;
         a.y = ay;
       }
-      if (!w.isBlocked(tileOf(bx), tileOf(by), b.team)) {
+      if (!blockedFor(w, b, tileOf(bx), tileOf(by))) {
         b.x = bx;
         b.y = by;
       }
@@ -1571,7 +1656,24 @@ function separate(w: World): void {
 
 // ---------- buildings ----------
 
-function spawnPoint(w: World, b: Entity): Pt {
+function spawnPoint(w: World, b: Entity, type: UnitType = 'villager'): Pt {
+  if (UNITS[type].naval) {
+    // a boat is launched onto the nearest water beside the dock
+    let best: Pt | null = null;
+    let bd = Infinity;
+    for (let y = b.ty - 2; y <= b.ty + b.size + 1; y++)
+      for (let x = b.tx - 2; x <= b.tx + b.size + 1; x++) {
+        if (!sailable(w, x, y)) continue;
+        const d = distToEntity((x + 0.5) * T, (y + 0.5) * T, b);
+        if (d < bd) {
+          bd = d;
+          best = { x: (x + 0.5) * T, y: (y + 0.5) * T };
+        }
+      }
+    if (best) return best;
+    const f = nearestFree(navGrid(w), Math.min(w.w - 1, b.tx), Math.min(w.h - 1, b.ty), 10, -1);
+    return f ? { x: (f.x + 0.5) * T, y: (f.y + 0.5) * T } : { x: b.x, y: b.y };
+  }
   const tx0 = b.tx - 1;
   const ty0 = b.ty - 1;
   const tx1 = b.tx + b.size;
@@ -1621,14 +1723,14 @@ function updateBuilding(w: World, b: Entity, dt: number): void {
         b.housed = false;
         b.queue.shift();
         b.queueT = 0;
-        const p = spawnPoint(w, b);
+        const p = spawnPoint(w, b, type);
         const u = spawnUnit(w, type, b.team, p.x, p.y);
         team.popUsed++;
         team.stats.trained++;
         w.emit({ t: 'trained', id: u.id, team: b.team, type, x: u.x, y: u.y });
         const rt = b.rallyTarget ? w.get(b.rallyTarget) : undefined;
         if (rt && type === 'villager' && rt.type === 'farm') setOrder(u, { type: 'gather', target: rt.id, resType: 'farm', phase: 'go', dropId: 0 });
-        else if (rt && rt.kind === 'resource' && type === 'villager') orderGather(w, [u], rt);
+        else if (rt && rt.kind === 'resource' && (type === 'villager' || (type === 'fishingBoat' && rt.type === 'fish'))) orderGather(w, [u], rt);
         else if (b.rally) orderMove(w, [u], b.rally.x, b.rally.y);
       }
     }
@@ -1754,7 +1856,7 @@ export function step(w: World, dt: number): void {
   }
 
   for (let t = 0; t < 2; t++) {
-    const army = w.units.reduce((n, u) => n + (u.team === t && u.type !== 'villager' ? 1 : 0), 0);
+    const army = w.units.reduce((n, u) => n + (u.team === t && isSoldier(u) ? 1 : 0), 0);
     if (army > w.teams[t].stats.peakArmy) w.teams[t].stats.peakArmy = army;
   }
   if (w.history.length === 0 || w.time - w.history[w.history.length - 1].t >= HISTORY_EVERY - 1e-6) recordSnapshot(w);
@@ -1771,7 +1873,7 @@ export function step(w: World, dt: number): void {
 }
 
 function recordSnapshot(w: World): void {
-  const count = (t: number, vill: boolean): number => w.units.reduce((n, u) => n + (u.team === t && !u.dead && (u.type === 'villager') === vill ? 1 : 0), 0);
+  const count = (t: number, vill: boolean): number => w.units.reduce((n, u) => n + (u.team === t && !u.dead && (vill ? u.type === 'villager' : isSoldier(u)) ? 1 : 0), 0);
   w.history.push({
     t: w.time,
     villagers: [count(0, true), count(1, true)],

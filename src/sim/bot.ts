@@ -9,6 +9,7 @@ import {
   RESOURCES,
   UNITS,
   type BuildingType,
+  type Cost,
   type Difficulty,
   type DifficultyKey,
   type Opening,
@@ -26,6 +27,7 @@ import {
   unitAvailable,
   distToEntity,
   freeFarm,
+  isNaval,
   isSoldier,
   nearestDropoff,
   nearestResource,
@@ -53,6 +55,7 @@ export interface Bot {
   defending: Set<number>;
   saving: boolean; // saving up to advance an age
   savingSince: number;
+  reserve: Cost; // set aside for a Pagoda or a war boat: troops are not trained out of it
 }
 
 export function createBot(w: World, team: number, diffKey: DifficultyKey, openingKey?: OpeningKey): Bot {
@@ -73,6 +76,7 @@ export function createBot(w: World, team: number, diffKey: DifficultyKey, openin
     defending: new Set(),
     saving: false,
     savingSince: -1,
+    reserve: {},
   };
 }
 
@@ -97,7 +101,8 @@ export function findBuildSpot(w: World, team: number, type: BuildingType, cx: nu
   }
   cands.sort((a, b) => a.d - b.d);
   for (const c of cands) {
-    if (canPlace(w, team, type, c.tx, c.ty, false) === 'blocked') continue;
+    const r = canPlace(w, team, type, c.tx, c.ty, false);
+    if (r === 'blocked' || r === 'shore') continue;
     let lane = true;
     for (let y = c.ty - 1; y <= c.ty + size && lane; y++) {
       for (let x = c.tx - 1; x <= c.tx + size; x++) {
@@ -158,6 +163,8 @@ function economy(w: World, bot: Bot, tc: Entity): void {
   const threat = bot.threatSince >= 0;
   const have: Record<ResKind, number> = { food: 0, wood: 0, gold: 0, stone: 0 };
   for (const v of vills) if (v.order.type === 'gather') have[kindOf(v.order.resType)]++;
+  // each fishing boat brings in food, so fewer villagers need to farm
+  have.food += teamUnits(w, bot.team, 'fishingBoat').length;
   const share = (n: number): Record<ResKind, number> => {
     const gold = team.age >= 1 ? 0.18 : 0;
     const stone = team.age >= 1 && bot.opening.towers > 0 ? 0.08 : 0;
@@ -269,6 +276,8 @@ function economy(w: World, bot: Bot, tc: Entity): void {
     tryBuild(w, bot, 'barracks', toward.x, toward.y, 2, 9);
   } else if (team.age >= 1 && count('stable') === 0 && allMix.includes('cavalry')) {
     tryBuild(w, bot, 'stable', toward.x, toward.y, 2, 10);
+  } else if (team.age >= 1 && count('pagoda') === 0 && allMix.includes('samurai') && vills.length >= 16) {
+    if (!tryBuild(w, bot, 'pagoda', toward.x, toward.y, 3, 11)) bot.reserve = BUILDINGS.pagoda.cost;
   } else if (count('barracks') === 1 && bot.diffKey !== 'easy' && vills.length >= 20) {
     tryBuild(w, bot, 'barracks', toward.x, toward.y, 2, 10);
   } else if (team.age >= 1 && count('guardTower') + count('watchTower') < bot.opening.towers) {
@@ -284,8 +293,8 @@ function military(w: World, bot: Bot): void {
   const tc = home(w, bot);
   const villagersWanted = vills < bot.diff.villagerTarget && !(bot.opening.earlyVillagerCap !== null && bot.attacksSent === 0 && vills >= bot.opening.earlyVillagerCap);
   const mix = bot.attacksSent === 0 ? bot.opening.mix : bot.opening.mixAfter;
-  const soldiers = w.units.filter((u) => !u.dead && u.team === bot.team && isSoldier(u) && u.type !== 'scout');
-  const trainers = w.buildings.filter((b) => !b.dead && b.team === bot.team && b.progress >= 1 && (b.type === 'barracks' || b.type === 'stable'));
+  const soldiers = w.units.filter((u) => !u.dead && u.team === bot.team && isSoldier(u) && !isNaval(u) && u.type !== 'scout');
+  const trainers = w.buildings.filter((b) => !b.dead && b.team === bot.team && b.progress >= 1 && (b.type === 'barracks' || b.type === 'stable' || b.type === 'pagoda'));
   for (const b of trainers) {
     if (b.queue.length >= 2) continue;
     const canTrain = BUILDINGS[b.type as BuildingType].trains;
@@ -309,7 +318,9 @@ function military(w: World, bot: Bot): void {
     const cost = UNITS[pick].cost;
     const reserve = villagersWanted && tc && tc.queue.length === 0 ? 50 : 0;
     if (bot.saving) continue;
-    if (team.food >= (cost.food ?? 0) + reserve && canAfford(w, bot.team, cost)) train(w, b, pick);
+    // keep back what is set aside for a Pagoda or a war boat
+    const kept = (['food', 'wood', 'gold', 'stone'] as const).every((k) => team[k] - (cost[k] ?? 0) >= (bot.reserve[k] ?? 0) || !cost[k]);
+    if (kept && team.food >= (cost.food ?? 0) + reserve && canAfford(w, bot.team, cost)) train(w, b, pick);
   }
 }
 
@@ -318,7 +329,7 @@ function playerTargets(w: World, bot: Bot): Entity[] {
 }
 
 function attack(w: World, bot: Bot, tc: Entity): void {
-  const army = w.units.filter((u) => !u.dead && u.team === bot.team && isSoldier(u) && u.type !== 'scout' && !bot.defending.has(u.id));
+  const army = w.units.filter((u) => !u.dead && u.team === bot.team && isSoldier(u) && !isNaval(u) && u.type !== 'scout' && !bot.defending.has(u.id));
   const idle = army.filter((u) => u.order.type === 'idle');
   if (idle.length < bot.attackSize || w.time < bot.diff.firstAttackSec) return;
   const targets = playerTargets(w, bot);
@@ -353,7 +364,7 @@ function defend(w: World, bot: Bot, tc: Entity): void {
   const cx = threats.reduce((a, u) => a + u.x, 0) / threats.length;
   const cy = threats.reduce((a, u) => a + u.y, 0) / threats.length;
   // soldiers nearby come home to fight
-  const soldiers = w.units.filter((u) => !u.dead && u.team === bot.team && isSoldier(u) && Math.hypot(u.x - tc.x, u.y - tc.y) < 25 * T);
+  const soldiers = w.units.filter((u) => !u.dead && u.team === bot.team && isSoldier(u) && !isNaval(u) && Math.hypot(u.x - tc.x, u.y - tc.y) < 25 * T);
   const free = soldiers.filter((u) => u.order.type !== 'attack');
   if (free.length) {
     orderMove(w, free, cx, cy, true);
@@ -369,15 +380,57 @@ function defend(w: World, bot: Bot, tc: Entity): void {
   }
 }
 
+/**
+ * On the Inland Sea: a Dock near the closest fish, fishing boats to work the
+ * shoals, and from the Feudal Age a few war boats that hunt the enemy's boats
+ * and Dock.
+ */
+function naval(w: World, bot: Bot, tc: Entity): void {
+  if (w.river !== 'sea') return;
+  const team = w.teams[bot.team];
+  const vills = teamUnits(w, bot.team, 'villager').length;
+  const docks = teamBuildings(w, bot.team, 'dock');
+  const fish = nearestResource(w, tc.x, tc.y, (r) => r.type === 'fish', 60 * T);
+  if (docks.length === 0) {
+    if (vills >= 9 && fish && !bot.saving) tryBuild(w, bot, 'dock', fish.x, fish.y, 1, 12);
+    return;
+  }
+  const dock = docks.find((d) => d.progress >= 1);
+  const boats = teamUnits(w, bot.team, 'fishingBoat');
+  const wars = teamUnits(w, bot.team, 'warBoat');
+  const wantFish = Math.max(2, Math.round(bot.diff.villagerTarget / 6));
+  const wantWar = team.age >= 1 ? Math.max(2, Math.round(4 * bot.diff.armyScale)) : 0;
+  if (dock && dock.queue.length === 0 && !bot.saving) {
+    if (boats.length < wantFish) train(w, dock, 'fishingBoat');
+    else if (wars.length < wantWar && train(w, dock, 'warBoat') === 'cost') bot.reserve = UNITS.warBoat.cost;
+  }
+  // idle fishing boats go back to the nearest shoal
+  for (const b of boats) {
+    if (b.order.type !== 'idle') continue;
+    const f = nearestResource(w, b.x, b.y, (r) => r.type === 'fish', 60 * T);
+    if (f) setOrder(b, { type: 'gather', target: f.id, resType: 'fish', phase: 'go', dropId: 0 });
+  }
+  // war boats: once there are enough, go after the enemy's boats, then its Dock
+  const idle = wars.filter((u) => u.order.type === 'idle');
+  if (idle.length >= Math.min(3, wantWar) && idle.length === wars.length) {
+    const foes = w.units.filter((u) => !u.dead && u.team !== bot.team && u.team < 2 && isNaval(u));
+    const foeDocks = w.buildings.filter((b) => !b.dead && b.team !== bot.team && b.team < 2 && b.type === 'dock');
+    const goal = [...foes, ...foeDocks].sort((a, b) => Math.hypot(a.x - tc.x, a.y - tc.y) - Math.hypot(b.x - tc.x, b.y - tc.y))[0];
+    if (goal) orderMove(w, idle, goal.x, goal.y, true);
+  }
+}
+
 export function updateBot(w: World, bot: Bot, dt: number): void {
   bot.t -= dt;
   if (bot.t > 0) return;
   bot.t = bot.diff.decideSec * (0.8 + w.rng() * 0.4);
   const tc = home(w, bot);
   if (!tc) return;
+  bot.reserve = {};
   defend(w, bot, tc);
   if (w.rng() < bot.diff.mistakeChance) return;
   economy(w, bot, tc);
+  naval(w, bot, tc);
   military(w, bot);
   attack(w, bot, tc);
 }

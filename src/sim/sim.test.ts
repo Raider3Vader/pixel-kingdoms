@@ -26,6 +26,9 @@ import {
   spawnBuilding,
   spawnResource,
   spawnUnit,
+  spawnFish,
+  sailable,
+  isNaval,
   step,
   teamUnits,
   train,
@@ -588,4 +591,92 @@ describe('delete and gates on walls', () => {
     expect(placeBuilding(w, PLAYER, 'gate', 21, 20, [], false)).toBe('ok');
     expect(w.teams[PLAYER].wood).toBe(before + BUILDINGS.wall.cost.wood! - BUILDINGS.gate.cost.wood!);
   });
+});
+
+describe('samurai and the Pagoda', () => {
+  it('the Pagoda needs the Feudal Age and trains Samurai', () => {
+    const w = testWorld();
+    w.teams[PLAYER].wood = w.teams[PLAYER].stone = w.teams[PLAYER].food = w.teams[PLAYER].gold = 1000;
+    expect(canPlace(w, PLAYER, 'pagoda', 20, 20, false)).toBe('age');
+    w.teams[PLAYER].age = 1;
+    const p = spawnBuilding(w, 'pagoda', PLAYER, 20, 20, true);
+    expect(train(w, p, 'samurai')).toBe('ok');
+    run(w, UNITS.samurai.trainSec + 1);
+    expect(teamUnits(w, PLAYER, 'samurai').length).toBe(1);
+  });
+
+  it('a Samurai beats a Man-at-Arms one on one', () => {
+    const w = testWorld();
+    w.teams[PLAYER].age = w.teams[ENEMY].age = 1;
+    const s = spawnUnit(w, 'samurai', PLAYER, 20 * T, 20 * T);
+    const m = spawnUnit(w, 'swordsman', ENEMY, 22 * T, 20 * T);
+    orderAttack(w, [s], m);
+    run(w, 30);
+    expect(m.dead).toBe(true);
+    expect(s.dead).toBe(false);
+  });
+});
+
+describe('boats', () => {
+  /** A test world with a lake from x 24..40, y 10..30. */
+  function lakeWorld(): World {
+    const w = testWorld();
+    for (let y = 10; y <= 30; y++)
+      for (let x = 24; x <= 40; x++) {
+        w.water[y * w.w + x] = 1;
+        w.blocked[y * w.w + x] = 3;
+      }
+    return w;
+  }
+
+  it('a Dock must touch the water', () => {
+    const w = lakeWorld();
+    w.teams[PLAYER].wood = 500;
+    expect(canPlace(w, PLAYER, 'dock', 10, 12, false)).toBe('shore');
+    expect(canPlace(w, PLAYER, 'dock', 22, 15, false)).toBe('ok');
+  });
+
+  it('fishing boats launch on the water, catch fish and bring it to the Dock', () => {
+    const w = lakeWorld();
+    w.teams[PLAYER].wood = 500;
+    const dock = spawnBuilding(w, 'dock', PLAYER, 22, 15, true);
+    for (const [x, y] of [[30, 16], [31, 16]]) expect(spawnFish(w, x, y)).not.toBeNull();
+    expect(train(w, dock, 'fishingBoat')).toBe('ok');
+    run(w, UNITS.fishingBoat.trainSec + 0.5);
+    const boat = teamUnits(w, PLAYER, 'fishingBoat')[0];
+    expect(boat).toBeDefined();
+    expect(sailable(w, Math.floor(boat.x / T), Math.floor(boat.y / T))).toBe(true);
+    const food = w.teams[PLAYER].food;
+    const fish = w.resources.find((r) => r.type === 'fish')!;
+    orderGather(w, [boat], fish);
+    run(w, 90);
+    expect(w.teams[PLAYER].food).toBeGreaterThan(food + 30);
+    expect(sailable(w, Math.floor(boat.x / T), Math.floor(boat.y / T))).toBe(true);
+  });
+
+  it('war boats sink fishing boats and shoot at the shore; foot soldiers cannot fight a boat', () => {
+    const w = lakeWorld();
+    w.teams[PLAYER].age = 1;
+    const war = spawnUnit(w, 'warBoat', PLAYER, 28.5 * T, 20.5 * T);
+    const prey = spawnUnit(w, 'fishingBoat', ENEMY, 34.5 * T, 20.5 * T);
+    run(w, 40);
+    expect(prey.dead).toBe(true);
+    // a swordsman on the shore ignores the boat; the boat shoots him
+    const sw = spawnUnit(w, 'swordsman', ENEMY, 22.5 * T, 20.5 * T);
+    war.x = 25.5 * T;
+    war.y = 20.5 * T;
+    run(w, 40);
+    expect(sw.dead).toBe(true);
+    for (const u of w.units) if (isNaval(u)) expect(sailable(w, Math.floor(u.x / T), Math.floor(u.y / T))).toBe(true);
+  });
+
+  it('the AI builds a Dock, fishes and sends war boats on the Inland Sea', () => {
+    const { world: w } = createMatch(3, { map: 'inlandSea' });
+    const bot = createBot(w, ENEMY, 'hard', 'boom');
+    run(w, 16 * 60, () => updateBot(w, bot, DT));
+    expect(w.buildings.some((b) => b.team === ENEMY && b.type === 'dock')).toBe(true);
+    expect(teamUnits(w, ENEMY, 'fishingBoat').length).toBeGreaterThan(0);
+    expect(w.teams[ENEMY].stats.byKind.food).toBeGreaterThan(0);
+    for (const u of w.units) if (isNaval(u)) expect(sailable(w, Math.floor(u.x / T), Math.floor(u.y / T))).toBe(true);
+  }, 60_000);
 });

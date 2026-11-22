@@ -11,6 +11,7 @@ import {
   corpseSprite,
   foundationSprite,
   farmSprite,
+  fishSprite,
   getTheme,
   mineSprite,
   sheepSprite,
@@ -281,7 +282,10 @@ export function drawWorld(ctx: CanvasRenderingContext2D, w: World, terrain: HTML
             const s = berrySprite(Math.ceil((e.amount / e.startAmount) * 8));
             ctx.drawImage(s, Math.round(e.x - s.width / 2), (e.ty + 1) * T - s.height + (sak ? 3 : 0));
           }
-          else if (e.type === 'gold' || e.type === 'stone') {
+          else if (e.type === 'fish') {
+            const s = fishSprite(Math.ceil((e.amount / e.startAmount) * 4), Math.floor(t * 1.5 + e.id) % 2);
+            ctx.drawImage(s, e.tx * T, e.ty * T);
+          } else if (e.type === 'gold' || e.type === 'stone') {
             const s = mineSprite(e.type, Math.ceil((e.amount / e.startAmount) * 4));
             ctx.drawImage(s, Math.round(e.x - s.width / 2), (e.ty + 1) * T - s.height + 2);
           } else {
@@ -336,8 +340,22 @@ export function drawWorld(ctx: CanvasRenderingContext2D, w: World, terrain: HTML
     items.push({
       y: u.y,
       draw: () => {
-        if (o.selected.has(u.id)) ellipse(ctx, u.x, u.y + 1, u.type === 'cavalry' ? 7 : 5, u.team === PLAYER ? PAL.white : PAL.orange);
-        else if (o.hoverId === u.id) ellipse(ctx, u.x, u.y + 1, u.type === 'cavalry' ? 7 : 5, PAL.silver);
+        const boat = u.type === 'fishingBoat' || u.type === 'warBoat';
+        const ring = boat ? (u.type === 'warBoat' ? 12 : 9) : u.type === 'cavalry' ? 7 : 5;
+        if (o.selected.has(u.id)) ellipse(ctx, u.x, u.y + 1, ring, u.team === PLAYER ? PAL.white : PAL.orange);
+        else if (o.hoverId === u.id) ellipse(ctx, u.x, u.y + 1, ring, PAL.silver);
+        if (boat) {
+          // boats rock on the water and leave a wake when they move
+          const bob = Math.round(Math.sin(t * 2.2 + u.id) * 0.8);
+          if (u.anim === 'walk') {
+            ctx.fillStyle = '#cfe6f2';
+            const back = u.facing < 0 ? 1 : -1;
+            for (let k = 1; k <= 3; k++) ctx.fillRect(Math.round(u.x + back * (8 + k * 3)), Math.round(u.y) + (k % 2) - 1, 2, 1);
+          }
+          const spr = unitSprite(u.type, u.team, 'idle', 0, '', w.teams[u.team]?.age ?? 0);
+          drawFlipped(ctx, spr, Math.round(u.x) - Math.floor(spr.width / 2), Math.round(u.y) - spr.height + 4 + bob, u.facing < 0);
+          return;
+        }
         const pose = u.anim as UnitPose;
         let frame = 0;
         if (pose === 'walk') frame = Math.floor(u.animT * 7) % 2;
@@ -362,7 +380,7 @@ export function drawWorld(ctx: CanvasRenderingContext2D, w: World, terrain: HTML
       const ety = Math.floor(e.y / T);
       if (!w.inBounds(etx, ety) || !vis[ety * w.w + etx]) continue;
     }
-    if (e.kind === 'unit') hpBar(ctx, e.x - 6, e.y - 16, 12, e.hp / e.maxHp, e.team);
+    if (e.kind === 'unit') hpBar(ctx, e.x - 6, e.y - (e.type === 'warBoat' ? 26 : 16), 12, e.hp / e.maxHp, e.team);
     else {
       const bw = e.size * T - 6;
       const by = e.ty * T - (e.type === 'townCenter' ? 10 : 6);
@@ -580,7 +598,7 @@ export function drawMinimap(ctx: CanvasRenderingContext2D, w: World, cam: Camera
   for (let i = 0; i < w.w * w.h; i++) if (w.water[i]) set(i, '#3f78c4');
   else if (w.bridge[i] === 2) set(i, '#7fb2d6');
   else if (w.bridge[i]) set(i, '#c08a52');
-  for (const r of w.resources) set(r.ty * w.w + r.tx, r.type === 'tree' ? '#1f5536' : r.type === 'berries' ? '#d63a4a' : r.type === 'gold' ? '#ffcd75' : r.type === 'stone' ? '#94b0c2' : '#ecebe4');
+  for (const r of w.resources) set(r.ty * w.w + r.tx, r.type === 'tree' ? '#1f5536' : r.type === 'berries' ? '#d63a4a' : r.type === 'gold' ? '#ffcd75' : r.type === 'stone' ? '#94b0c2' : r.type === 'fish' ? '#9fd4f0' : '#ecebe4');
   for (const b of w.buildings) {
     if (fog && b.team !== PLAYER && !b.seen) continue;
     const c = TEAM[b.team].light;

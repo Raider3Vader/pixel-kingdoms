@@ -9,6 +9,23 @@ export interface ChangelogEntry {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    version: '0.10.0',
+    date: '2026-11-22',
+    title: 'Samurai and boats',
+    items: [
+      'New building: the Pagoda (Feudal Age, 175 wood and 100 stone), a slender five-storey pagoda that trains Samurai.',
+      'New unit: the Samurai (65 food, 45 gold). An elite swordsman with quick, heavy blows that cut down swordsmen, spearmen and archers. Elite Samurai in the Imperial Age.',
+      'New building: the Dock (120 wood), built on the shore touching water. It trains fishing boats and war boats.',
+      'Fishing boats (60 wood) catch fish from shoals out in the water and bring it back to a Dock. They carry twice as much as a villager and cannot fight.',
+      'War boats (Feudal Age, 90 wood and 30 gold) shoot arrows from the water at boats, troops and buildings near the shore. Heavy war boats in the Imperial Age.',
+      'Boats sail across open water, sandbars and fords, and under bridges. Foot soldiers cannot fight a boat out on the water, but archers, towers and Town Centers can shoot it.',
+      'Fish shoals off every coast on the Inland Sea, and a few in the wider rivers.',
+      'The villager build menu now has three pages. Press F to go from Build (houses, paddies, storehouses, Dock, Market) to Army (Barracks, Stable, Pagoda) to Walls.',
+      'The enemy builds a Dock, fishing boats and war boats on the Inland Sea, and a Pagoda with Samurai in some openings.',
+      'Unit bonuses are written shorter (like +3 vs swords/spears/archers) so they fit in the panel.',
+    ],
+  },
+  {
     version: '0.9.2',
     date: '2026-11-22',
     title: 'Cancel boxes and adding groups',

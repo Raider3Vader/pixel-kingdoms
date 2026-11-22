@@ -82,6 +82,11 @@ const TIPS: Record<string, string> = {
   archer: 'Good against most things from range. Weak up close and against heavy armor.',
   cavalry: 'Fast and a bit stronger than swordsmen. Runs down archers. Fears spears.',
   scout: 'Very fast and sees far. Weak arrows from 3 tiles. Explores without picking fights.',
+  pagoda: 'A five-storey pagoda where Samurai train.',
+  dock: 'Build it on the shore. Trains fishing boats and war boats; fishing boats bring their catch here.',
+  samurai: 'Elite swordsman: quick, heavy blows that cut down swordsmen, spearmen and archers. Costs gold.',
+  fishingBoat: 'Catches fish out on the water and brings it back to a Dock. Cannot fight.',
+  warBoat: 'Shoots arrows from the water at boats, troops and buildings near the shore. Strong against fishing boats.',
 };
 
 function icon(type: string, team: number, size: number, tier = 0): HTMLCanvasElement {
@@ -451,7 +456,7 @@ export class Game {
     if (sound && list.length) this.audio.play('select');
   }
 
-  private buildPage: 0 | 1 = 0; // villager build menu: 0 economy and army, 1 defenses
+  private buildPage = 0; // villager build menu: 0 economy, 1 army, 2 defenses
 
   private commands(): Cmd[] {
     const w = this.world;
@@ -465,7 +470,8 @@ export class Game {
     const lockedTip = (age: number): string => `Needs the ${AGES[age].name}.`;
     if (vills.length) {
       const pages: BuildingType[][] = [
-        ['house', 'farm', 'storehouse', 'barracks', 'stable', 'market'],
+        ['house', 'farm', 'storehouse', 'dock', 'market'],
+        ['barracks', 'stable', 'pagoda'],
         ['wall', 'gate', 'watchTower', 'stoneWall', 'stoneGate', 'guardTower'],
       ];
       pages[this.buildPage].forEach((b, i) => {
@@ -497,14 +503,20 @@ export class Game {
           },
         });
       });
+      // F flips through the three pages; the button shows the page it goes to next
+      const NEXT = [
+        { icon: 'barracks', label: 'Army', tip: 'Army buildings: Barracks, Stable and Pagoda.' },
+        { icon: 'wall', label: 'Walls', tip: 'Walls, gates and towers.' },
+        { icon: 'house', label: 'Build', tip: 'Houses, rice paddies, storehouses, docks and the market.' },
+      ][this.buildPage];
       out.push({
         key: 'F',
-        icon: this.buildPage === 0 ? 'wall' : 'house',
-        label: this.buildPage === 0 ? 'Walls' : 'Build',
+        icon: NEXT.icon,
+        label: NEXT.label,
         enabled: true,
-        tip: this.buildPage === 0 ? 'Walls, gates and towers.' : 'Houses, storehouses, barracks, stable and market.',
+        tip: NEXT.tip,
         run: () => {
-          this.buildPage = this.buildPage === 0 ? 1 : 0;
+          this.buildPage = (this.buildPage + 1) % 3;
           this.mode = { kind: 'none' };
           this.audio.play('click');
         },
@@ -926,7 +938,7 @@ export class Game {
     } else {
       this.audio.play('error');
       const c = BUILDINGS[g.type].cost;
-      this.toast(r === 'cost' ? `Not enough ${shortOf(this.world, PLAYER, c)} (${costText(c)}).` : r === 'unexplored' ? 'You cannot build in unexplored land.' : r === 'age' ? 'Not available in this age.' : 'Cannot build there.');
+      this.toast(r === 'cost' ? `Not enough ${shortOf(this.world, PLAYER, c)} (${costText(c)}).` : r === 'unexplored' ? 'You cannot build in unexplored land.' : r === 'age' ? 'Not available in this age.' : r === 'shore' ? 'Docks must be built on the shore, touching water.' : 'Cannot build there.');
     }
   }
 
@@ -1234,9 +1246,14 @@ export class Game {
       }
       if (e.kind === 'unit') {
         const s = unitStats(e.type as UnitType, w.teams[e.team].age);
-        const bonus = Object.entries(s.bonus)
-          .map(([k, v]) => `+${Math.round(v * (s.bonusScale ?? 1))} vs ${UNITS[k as UnitType].tiers[w.teams[e.team].age].name}`)
-          .join(' ');
+        // short names, grouped by size, so the line stays short: e.g. +3 vs swords/spears/archers
+        const SHORT: Partial<Record<UnitType, string>> = { villager: 'villagers', swordsman: 'swords', spearman: 'spears', archer: 'archers', cavalry: 'cavalry', scout: 'scouts', samurai: 'samurai', fishingBoat: 'fishers', warBoat: 'warships' };
+        const groups = new Map<number, string[]>();
+        for (const [k, v] of Object.entries(s.bonus)) {
+          const n = Math.round(v * (s.bonusScale ?? 1));
+          groups.set(n, [...(groups.get(n) ?? []), SHORT[k as UnitType] ?? k]);
+        }
+        const bonus = [...groups].map(([n, names]) => `+${n} vs ${names.join('/')}`).join(' ');
         let task = '';
         const o = e.order;
         if (o.type === 'gather') task = o.phase === 'drop' ? `Carrying ${Math.floor(e.carry)} ${e.carryKind ?? ''}` : `Gathering ${RESOURCES[o.resType].kind} (${Math.floor(e.carry)}/10)`;
@@ -1304,7 +1321,7 @@ export class Game {
         });
         info.appendChild(q);
         if (e.housed) info.insertAdjacentHTML('beforeend', `<div class="warn">Need a House to train more.</div>`);
-      } else if (s.trains.length) {
+      } else if (s.trains.length && e.hp >= e.maxHp) {
         info.insertAdjacentHTML('beforeend', `<div class="dim">Right-click the map to set a rally point.</div>`);
       } else if (s.dropoff) {
         info.insertAdjacentHTML('beforeend', `<div class="dim">Villagers drop off resources here.</div>`);
