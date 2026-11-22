@@ -29,6 +29,9 @@ export const AGES: { name: string; cost: Cost; sec: number }[] = [
   { name: 'Imperial Age', cost: { food: 600, wood: 300, gold: 200 }, sec: 90 },
 ];
 
+/** When the music switches to the battle loop: this many fighting hits within `window` seconds; back to calm after `calmAfter` quiet seconds. */
+export const MUSIC_MOOD = { hits: 5, window: 6, calmAfter: 18 };
+
 export const SIM = {
   tickHz: 30,
   unitRadius: 5, // px

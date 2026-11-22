@@ -6,6 +6,7 @@ import { Game } from './game';
 import { CHANGELOG, VERSION } from './changelog';
 import { TitleScene } from './title';
 import { setTheme } from './render/sprites';
+import { drawGraph, fmtClock, summaryRows, type GraphKey, type MatchResults } from './stats';
 
 const $ = <E extends HTMLElement>(id: string): E => document.getElementById(id) as E;
 
@@ -77,6 +78,8 @@ function renderMenu(): void {
   for (const b of Array.from($('diff').querySelectorAll('button'))) b.classList.toggle('on', b.dataset.d === difficulty);
   $('diff-hint').textContent = DIFF_HINTS[difficulty];
   $('mute-btn').textContent = audio.muted ? 'Sound: off' : 'Sound: on';
+  $('music-btn').textContent = audio.musicOn ? 'Music: on' : 'Music: off';
+  $('music-btn2').textContent = audio.musicOn ? 'Music: on' : 'Music: off';
 }
 
 function startGame(): void {
@@ -86,6 +89,7 @@ function startGame(): void {
   game = new Game(canvas, audio, { difficulty, seed: Math.floor(Math.random() * 1e9) });
   game.onPauseRequest = () => pause();
   game.onGameOver = (won) => setTimeout(() => gameOver(won), 1200);
+  audio.setMood('calm');
   screen = 'playing';
   show(null);
   $('hud').classList.remove('hidden');
@@ -95,6 +99,7 @@ function toMenu(): void {
   game.destroy();
   game = new Game(canvas, audio, { difficulty: 'hard', seed: Math.floor(Math.random() * 1e9), attract: true });
   screen = 'menu';
+  audio.setMood('calm');
   $('hud').classList.add('hidden');
   show('menu');
   renderMenu();
@@ -113,14 +118,48 @@ function resume(): void {
   show(null);
 }
 
+let lastResults: MatchResults | null = null;
+let graphKey: GraphKey = 'army';
+
 function gameOver(won: boolean): void {
   const r = game.results();
+  lastResults = r;
   screen = 'over';
   $('over-title').textContent = won ? 'Victory!' : 'Defeat';
-  $('over-sub').textContent = `${won ? 'You destroyed the enemy Town Center' : 'Your Town Center fell'} after ${r.time}. The enemy opened with: ${r.opening}.`;
-  $('over-stats').innerHTML = `<tr><th></th><th>You</th><th>Enemy</th></tr>${r.rows.map(([k, a, b]) => `<tr><td>${k}</td><td>${a}</td><td>${b}</td></tr>`).join('')}`;
+  $('over-sub').textContent = `${won ? 'You destroyed the enemy Town Center' : 'Your Town Center fell'} after ${fmtClock(r.time)}. The enemy opened with: ${r.opening}.`;
+  const rows = summaryRows(r);
+  const lead = (a: string, b: string): [string, string] => {
+    const x = Number(a);
+    const y = Number(b);
+    if (Number.isNaN(x) || Number.isNaN(y) || x === y) return ['', ''];
+    return x > y ? [' lead', ''] : ['', ' lead'];
+  };
+  $('over-stats').innerHTML =
+    `<tr><th></th><th class="you">You</th><th class="foe">Enemy</th></tr>` +
+    rows
+      .map(([k, a, b], i) => {
+        // for "Units lost", fewer is better; for age times, values are clocks, not compared
+        const [la, lb] = k === 'Units lost' ? lead(b, a) : lead(a, b);
+        const gap = i === 4 || i === 10 ? ' class="gap"' : '';
+        return `<tr${gap}><td>${k}</td><td class="v${la}">${a}</td><td class="v${lb}">${b}</td></tr>`;
+      })
+      .join('');
   show('over');
+  drawOverGraph();
 }
+
+function drawOverGraph(): void {
+  if (!lastResults) return;
+  for (const b of Array.from($('graph-tabs').querySelectorAll('button'))) b.classList.toggle('on', b.dataset.g === graphKey);
+  drawGraph($<HTMLCanvasElement>('over-graph'), lastResults, graphKey);
+}
+$('graph-tabs').addEventListener('click', (e) => {
+  const b = (e.target as HTMLElement).closest('button');
+  if (!b?.dataset.g) return;
+  graphKey = b.dataset.g as GraphKey;
+  audio.play('click');
+  drawOverGraph();
+});
 
 let helpReturn: string = 'menu';
 function openHelp(from: string): void {
@@ -148,6 +187,28 @@ $('mute-btn').addEventListener('click', () => {
   audio.play('click');
   renderMenu();
 });
+for (const id of ['music-btn', 'music-btn2'])
+  $(id).addEventListener('click', () => {
+    audio.unlock();
+    audio.toggleMusic();
+    audio.play('click');
+    renderMenu();
+  });
+function renderFull(): void {
+  const on = !!document.fullscreenElement;
+  for (const id of ['full-btn', 'full-btn2']) $(id).textContent = on ? 'Exit full screen' : 'Full screen';
+}
+for (const id of ['full-btn', 'full-btn2'])
+  $(id).addEventListener('click', () => {
+    audio.unlock();
+    audio.play('click');
+    if (document.fullscreenElement) void document.exitFullscreen();
+    else void document.documentElement.requestFullscreen?.().catch(() => undefined);
+  });
+document.addEventListener('fullscreenchange', () => {
+  renderFull();
+  fit();
+});
 $('help-btn').addEventListener('click', () => openHelp('menu'));
 $('help-btn2').addEventListener('click', () => openHelp('pause'));
 $('help-close').addEventListener('click', () => show(helpReturn));
@@ -157,6 +218,7 @@ function leaveTitle(): void {
   if (screen !== 'title') return;
   audio.unlock();
   audio.play('click');
+  audio.setMood('calm');
   screen = 'menu';
   show('menu');
   renderMenu();

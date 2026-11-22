@@ -9,6 +9,19 @@ export interface ChangelogEntry {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    version: '0.8.0',
+    date: '2026-11-22',
+    title: 'Music and match stats',
+    items: [
+      'Music: a calm loop of koto, a soft drone and a bamboo flute while you build, and a battle loop with taiko drums when a real fight breaks out near you. It eases back to calm after the fighting stops.',
+      'New Music on/off button on the menu and the pause screen (M still mutes everything).',
+      'The end-of-match screen now shows each resource gathered, biggest army, buildings built and when each side reached each age, with the better number in gold.',
+      'Graphs of army size, villagers and resources gathered over the whole match, with dotted lines where each side reached a new age.',
+      'Fixed: the minimap only showed the top-left part of the bigger map. It now shows the whole map, and clicking it goes to the right place.',
+      'Fixed: the Full screen buttons did nothing.',
+    ],
+  },
+  {
     version: '0.7.3',
     date: '2026-11-20',
     title: 'River variants',

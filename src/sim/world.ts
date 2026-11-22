@@ -98,7 +98,20 @@ export interface TeamStats {
   killed: number;
   lost: number;
   razed: number;
+  built: number; // finished buildings
+  byKind: Record<ResKind, number>; // gathered, per resource
+  agedAt: number[]; // match time (s) each new age was reached
+  peakArmy: number;
 }
+
+/** One point on the end-of-match graphs, recorded every HISTORY_EVERY seconds. Index 0 = player, 1 = enemy. */
+export interface Snapshot {
+  t: number;
+  villagers: [number, number];
+  army: [number, number];
+  gathered: [number, number];
+}
+export const HISTORY_EVERY = 10;
 
 export interface TeamState {
   food: number;
@@ -143,6 +156,7 @@ export class World {
   nextId = 1;
   events: SimEvent[] = [];
   winner: number | null = null;
+  history: Snapshot[] = [];
   vis: Uint8Array[]; // per team, 1 = visible now
   explored: Uint8Array[];
   fogT = 0;
@@ -167,7 +181,7 @@ export class World {
         merchants: 0,
         popCap: 0,
         popUsed: 0,
-        stats: { gathered: 0, trained: 0, killed: 0, lost: 0, razed: 0 },
+        stats: { gathered: 0, trained: 0, killed: 0, lost: 0, razed: 0, built: 0, byKind: { food: 0, wood: 0, gold: 0, stone: 0 }, agedAt: [], peakArmy: 0 },
         lastAlertAt: -999,
       });
     }
@@ -600,6 +614,7 @@ function finishResearch(w: World, b: Entity): void {
       u.hp = (u.hp / u.maxHp) * max;
       u.maxHp = max;
     }
+    team.stats.agedAt.push(w.time);
     w.emit({ t: 'aged', team: b.team, age: team.age });
   } else if (key === 'merchant') {
     team.merchants++;
@@ -1123,6 +1138,7 @@ function gatherStep(w: World, u: Entity, dt: number): void {
         const amt = Math.floor(u.carry + 1e-6);
         team[u.carryKind] += amt;
         team.stats.gathered += amt;
+        team.stats.byKind[u.carryKind] += amt;
       }
       u.carry = 0;
       u.carryKind = null;
@@ -1235,6 +1251,7 @@ function buildStep(w: World, u: Entity, dt: number): void {
     if (b.progress >= 1) {
       applyGate(w, b);
       if (b.type === 'farm') b.amount = b.startAmount = RESOURCES.farm.amount;
+      if (b.team < 2) w.teams[b.team].stats.built++;
       w.emit({ t: 'built', id: b.id, team: b.team, type: b.type, x: b.x, y: b.y });
       finishBuildOrder(w, u, o, b);
     }
@@ -1649,12 +1666,29 @@ export function step(w: World, dt: number): void {
     updateFog(w);
   }
 
+  for (let t = 0; t < 2; t++) {
+    const army = w.units.reduce((n, u) => n + (u.team === t && u.type !== 'villager' ? 1 : 0), 0);
+    if (army > w.teams[t].stats.peakArmy) w.teams[t].stats.peakArmy = army;
+  }
+  if (w.history.length === 0 || w.time - w.history[w.history.length - 1].t >= HISTORY_EVERY - 1e-6) recordSnapshot(w);
+
   // win and lose: a Town Center destroyed ends the game
   for (let t = 0; t < 2; t++) {
     if (!w.buildings.some((b) => b.team === t && b.type === 'townCenter')) {
       w.winner = 1 - t;
+      recordSnapshot(w);
       w.emit({ t: 'gameOver', winner: w.winner });
       break;
     }
   }
+}
+
+function recordSnapshot(w: World): void {
+  const count = (t: number, vill: boolean): number => w.units.reduce((n, u) => n + (u.team === t && !u.dead && (u.type === 'villager') === vill ? 1 : 0), 0);
+  w.history.push({
+    t: w.time,
+    villagers: [count(0, true), count(1, true)],
+    army: [count(0, false), count(1, false)],
+    gathered: [w.teams[0].stats.gathered, w.teams[1].stats.gathered],
+  });
 }

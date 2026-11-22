@@ -1,6 +1,6 @@
 # Pixel Kingdoms: handoff
 
-Read this first in a new chat. Last updated 2026-11-20, version **0.7.3** (commit `e0a6fa9`).
+Read this first in a new chat. Last updated 2026-11-22, version **0.8.0**.
 
 ## 1. Where everything is
 
@@ -24,9 +24,10 @@ Read this first in a new chat. Last updated 2026-11-20, version **0.7.3** (commi
 - **Keep Classic hidden.** Its art is still in `src/render/sprites.ts`, but `setTheme` always forces `sakura`, and the Theme menu option was removed on request.
 - Test UI changes in the browser at a desktop size and at a small or zoomed-in size (about 600 x 336). The owner's browser is zoomed to about 165%.
 
-## 3. What the game has (0.7.3)
+## 3. What the game has (0.8.0)
 
-- **Screens:** a title screen (a villager chased by a rider), a menu (difficulty, Controls, Open changelog, Sound, Full screen), pause and victory/defeat screens. The game fills the whole window at a whole-number pixel scale.
+- **Screens:** a title screen (a villager chased by a rider), a menu (difficulty, Controls, Open changelog, Sound, Music, Full screen), pause and an end screen with a stats table and graphs (army, villagers, resources over time; `src/stats.ts`, data from `World.history`, a snapshot every 10 s).
+- **Music:** made live in `src/audio.ts` (`Music`, `TRACKS`): a calm loop (D yo scale, koto, drone, flute) and a battle loop (E in scale, taiko). `Game.updateMood()` switches to battle after `MUSIC_MOOD` hits nearby and back to calm after a quiet spell. The game fills the whole window at a whole-number pixel scale.
 - **Look:** Sakura Village (ancient Japan) only. Villagers in straw hats, samurai, three-quarter-view tile-roof buildings, a three-tier pagoda Town Center, cherry, pine and bamboo forests, and golden rice fields with scarecrows.
 - **Economy:** food, wood, gold and stone.
   - Persimmon trees and sheep are the starting food.
@@ -63,7 +64,7 @@ Read this first in a new chat. Last updated 2026-11-20, version **0.7.3** (commi
   - It advances ages, mines gold and stone, plants paddies, moves workers between resources and builds guard towers.
   - Its soldiers break through walls when blocked.
   - Difficulty changes how fast it decides and how many mistakes it makes; it never gets extra resources.
-- **Not built yet:** touch controls (the owner wants these later), music, deleting your own buildings, and a Classic version of anything added after Classic was hidden.
+- **Not built yet:** touch controls (the owner wants these later), deleting your own buildings, and a Classic version of anything added after Classic was hidden.
 
 ## 4. Code map
 
@@ -78,7 +79,7 @@ Read this first in a new chat. Last updated 2026-11-20, version **0.7.3** (commi
 
 ## 5. Tools and tests
 
-- `npm test` runs 44 tests: economy, every combat matchup, ages, the market, gates, towers, repair, paddies, formations, queued orders, every river layout (mirrored and connected), and AI games including Hard beating Easy.
+- `npm test` runs 48 tests: economy, every combat matchup, ages, the market, gates, towers, repair, paddies, formations, queued orders, every river layout (mirrored and connected), and AI games including Hard beating Easy.
 - `npm run balance` plays every opening against every other (32 games, takes several minutes). The last run was fairly even, with games of about 11 to 22 minutes.
 - `npx tsx scripts/mappng.ts out.png 5 5:twin` renders map overviews (`seed` or `seed:riverKind`). `scripts/showmap.ts` prints a map as text. `scripts/simulate.ts` traces one AI.
 - In the browser console, `pk()` returns the live Game. The built-in browser pane runs at about 1.5 fps when hidden, so drive time with `pk().update(1/60)` loops.
@@ -89,4 +90,5 @@ Read this first in a new chat. Last updated 2026-11-20, version **0.7.3** (commi
 - **Playtesting by hand:** age costs, market prices, wall strength and AI difficulty have only been tested AI against AI.
 - **Touch controls** for phones and tablets (the owner said "later").
 - **Balance:** Horse raid is the weakest opening. Rush is weaker since Dark Age units were made weaker, which was intended.
-- **Possible ideas, not requested yet:** a river or map choice on the menu, more Sakura looks for Imperial buildings, and music.
+- **Requested next (Nov 22):** an islands map (still Japanese) with naval troops; a special samurai unit trained at a Pagoda building; monks later.
+- **Possible ideas, not requested yet:** a river or map choice on the menu, more Sakura looks for Imperial buildings.

@@ -25,7 +25,7 @@
         <div id="panel">
           <div id="info"></div>
           <div id="cmds"></div>
-          <canvas id="minimap" width="64" height="64"></canvas>
+          <canvas id="minimap" width="96" height="96"></canvas>
         </div>
         <div id="toast"></div>
         <div id="tooltip" class="hidden"></div>
@@ -63,8 +63,9 @@
           </div>
           <div class="row">
             <button id="mute-btn">Sound: on</button>
-            <button id="full-btn">Full screen</button>
+            <button id="music-btn">Music: on</button>
           </div>
+          <button id="full-btn">Full screen</button>
           <p class="hint" id="menu-ver"></p>
           <p class="hint" id="touch-note" hidden>Pixel Kingdoms needs a mouse and keyboard for now. Touch controls are coming later.</p>
         </div>
@@ -78,15 +79,29 @@
             <button id="help-btn2">Controls</button>
             <button id="quit">Quit to menu</button>
           </div>
-          <button id="full-btn2">Full screen</button>
+          <div class="row">
+            <button id="music-btn2">Music: on</button>
+            <button id="full-btn2">Full screen</button>
+          </div>
         </div>
       </div>
 
       <div id="over" class="screen hidden">
-        <div class="card">
+        <div class="card wide">
           <h2 id="over-title">Victory</h2>
           <p class="sub" id="over-sub"></p>
-          <table id="over-stats"></table>
+          <div class="over-body">
+            <table id="over-stats"></table>
+            <div class="over-graph">
+              <div id="graph-tabs" class="choices">
+                <button data-g="army" class="on">Army</button>
+                <button data-g="villagers">Villagers</button>
+                <button data-g="gathered">Resources</button>
+              </div>
+              <canvas id="over-graph" width="260" height="120"></canvas>
+              <p class="hint graph-key"><span class="you">&#9632; You</span> <span class="foe">&#9632; Enemy</span> <span>Dots: new age</span></p>
+            </div>
+          </div>
           <div class="row">
             <button id="again" class="big">Play again</button>
             <button id="to-menu">Menu</button>

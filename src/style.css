@@ -171,8 +171,8 @@ button:focus-visible {
   align-items: flex-start;
 }
 #minimap {
-  width: calc(50px * var(--s));
-  height: calc(50px * var(--s));
+  width: calc(48px * var(--s));
+  height: calc(48px * var(--s));
   margin: calc(2px * var(--s));
   cursor: pointer;
   background: var(--ink);
@@ -415,22 +415,63 @@ dd {
   margin: 0;
   color: var(--dim);
 }
+#over .card.wide {
+  width: min(calc(560px * var(--s)), calc(100% - 12px * var(--s)));
+}
+.over-body {
+  display: flex;
+  gap: calc(10px * var(--s));
+  align-items: flex-start;
+  justify-content: center;
+}
 #over-stats {
-  margin: 0 auto;
   border-collapse: collapse;
+  flex: none;
 }
 #over-stats td,
 #over-stats th {
-  padding: calc(2px * var(--s)) calc(6px * var(--s));
+  padding: calc(1px * var(--s)) calc(5px * var(--s));
   text-align: right;
   font-weight: normal;
+  white-space: nowrap;
 }
 #over-stats th {
   color: var(--dim);
+}
+#over-stats th.you,
+#over-stats td.you {
+  color: #41a6f6;
+}
+#over-stats th.foe {
+  color: #ef7d57;
+}
+#over-stats td.lead {
+  color: var(--gold);
 }
 #over-stats td:first-child {
   text-align: left;
   color: var(--dim);
+}
+#over-stats tr.gap td {
+  padding-top: calc(4px * var(--s));
+}
+.over-graph {
+  display: flex;
+  flex-direction: column;
+  gap: calc(4px * var(--s));
+  width: calc(260px * var(--s));
+}
+#over-graph {
+  width: calc(260px * var(--s));
+  height: calc(120px * var(--s));
+  image-rendering: pixelated;
+  border: calc(1px * var(--s)) solid var(--edge);
+}
+.graph-key .you {
+  color: #41a6f6;
+}
+.graph-key .foe {
+  color: #ef7d57;
 }
 
 /* ---------- title screen ---------- */

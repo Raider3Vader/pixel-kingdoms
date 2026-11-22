@@ -554,6 +554,11 @@ function flames(ctx: CanvasRenderingContext2D, b: Entity, t: number): void {
 
 /** One pixel per tile overview. */
 export function drawMinimap(ctx: CanvasRenderingContext2D, w: World, cam: Camera, fog: boolean): void {
+  // one canvas pixel per tile: keep the canvas the same size as the map, or the edges get cut off
+  if (ctx.canvas.width !== w.w || ctx.canvas.height !== w.h) {
+    ctx.canvas.width = w.w;
+    ctx.canvas.height = w.h;
+  }
   const img = ctx.createImageData(w.w, w.h);
   const d = img.data;
   const set = (i: number, hex: string): void => {

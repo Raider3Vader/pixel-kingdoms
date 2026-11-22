@@ -454,3 +454,26 @@ describe('hostile', () => {
     expect(spawnUnit(w, 'archer', PLAYER, 10 * T, 12 * T).hostile).toBe(true);
   });
 });
+
+describe('match stats', () => {
+  it('records graph points, resources by kind, ages and the biggest army', () => {
+    const { world: w } = createMatch(6);
+    const bot = createBot(w, ENEMY, 'normal', 'boom');
+    run(w, 12 * 60, () => updateBot(w, bot, DT));
+    const s = w.teams[ENEMY].stats;
+    // a point roughly every 10 seconds, in time order
+    expect(w.time).toBeGreaterThan(5 * 60);
+    expect(Math.abs(w.history.length - w.time / 10)).toBeLessThan(2.5);
+    for (let i = 1; i < w.history.length; i++) expect(w.history[i].t).toBeGreaterThan(w.history[i - 1].t);
+    const lastPt = w.history[w.history.length - 1];
+    expect(lastPt.villagers[1]).toBeGreaterThan(5);
+    expect(lastPt.gathered[1]).toBeLessThanOrEqual(s.gathered);
+    // the per-resource totals add up to the overall total
+    expect(s.byKind.food + s.byKind.wood + s.byKind.gold + s.byKind.stone).toBe(s.gathered);
+    expect(s.byKind.food).toBeGreaterThan(0);
+    expect(s.byKind.wood).toBeGreaterThan(0);
+    expect(s.built).toBeGreaterThan(3);
+    expect(s.agedAt.length).toBe(w.teams[ENEMY].age);
+    expect(s.peakArmy).toBeGreaterThanOrEqual(Math.max(...w.history.map((p) => p.army[1])));
+  });
+});

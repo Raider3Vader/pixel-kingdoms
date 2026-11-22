@@ -1,7 +1,8 @@
 // One match: owns the world, the enemy AI, the camera, input and the HUD.
 
+import type { MatchResults } from './stats';
 import { Audio } from './audio';
-import { AGES, BUILDINGS, MAP, MARKET, RESOURCES, OPENINGS, RENDER, SIM, TOWER_UPGRADE, UNITS, costText, unitStats, type BuildingType, type Cost, type DifficultyKey, type UnitType } from './config';
+import { AGES, BUILDINGS, MAP, MARKET, RESOURCES, OPENINGS, RENDER, SIM, TOWER_UPGRADE, UNITS, costText, unitStats, type BuildingType, type Cost, type DifficultyKey, type UnitType, MUSIC_MOOD } from './config';
 import { buildingPos, buildTerrain, drawMinimap, drawWorld, Effects, type Camera, type Ghost } from './render/renderer';
 import { buildingSprite, iconFor } from './render/sprites';
 import { createBot, updateBot, type Bot } from './sim/bot';
@@ -233,6 +234,7 @@ export class Game {
       this.fx.update(dt);
     }
     this.handleEvents();
+    this.updateMood();
     if (this.attract && w.winner !== null) return;
 
     this.selected = this.selected.filter((e) => !e.dead);
@@ -286,7 +288,9 @@ export class Game {
         case 'hit': {
           const tx = Math.floor(ev.x / T);
           const ty = Math.floor(ev.y / T);
-          if (this.onScreen(ev.x, ev.y) && w.inBounds(tx, ty) && w.vis[PLAYER][ty * w.w + tx]) this.audio.play(ev.ranged ? 'arrow' : 'hit');
+          const seen = w.inBounds(tx, ty) && w.vis[PLAYER][ty * w.w + tx] === 1;
+          if (this.onScreen(ev.x, ev.y) && seen) this.audio.play(ev.ranged ? 'arrow' : 'hit');
+          if (seen && this.isBattleHit(ev.team, ev.x, ev.y)) this.combatHits.push(w.time);
           break;
         }
         case 'death': {
@@ -339,6 +343,7 @@ export class Game {
           break;
         case 'gameOver':
           this.over = true;
+          this.audio.setMood('off');
           this.audio.play(ev.winner === PLAYER ? 'victory' : 'defeat');
           this.onGameOver?.(ev.winner === PLAYER);
           break;
@@ -347,6 +352,30 @@ export class Game {
   }
 
   private alertAt: { x: number; y: number; t: number } | null = null;
+
+  // ---------- music mood ----------
+  private combatHits: number[] = [];
+  private lastBattleAt = -999;
+
+  /** A hit that is part of a fight between the two sides (not a villager hunting a sheep). */
+  private isBattleHit(attacker: number, x: number, y: number): boolean {
+    if (attacker === ENEMY) return true; // the enemy only ever hits your things
+    if (attacker !== PLAYER) return false;
+    const w = this.world;
+    for (const u of w.units) if (u.team === ENEMY && Math.abs(u.x - x) < 6 && Math.abs(u.y - y) < 6) return true;
+    for (const b of w.buildings) if (b.team === ENEMY && Math.abs(b.x - x) < 40 && Math.abs(b.y - y) < 40) return true;
+    return false;
+  }
+
+  /** Battle music while a real fight is on (several hits in a few seconds), calm again after a quiet spell. */
+  private updateMood(): void {
+    if (this.attract || this.over) return;
+    const t = this.world.time;
+    while (this.combatHits.length && this.combatHits[0] < t - MUSIC_MOOD.window) this.combatHits.shift();
+    if (this.combatHits.length >= MUSIC_MOOD.hits) this.lastBattleAt = t;
+    const want = t - this.lastBattleAt < MUSIC_MOOD.calmAfter ? 'battle' : 'calm';
+    if (this.audio.mood !== want) this.audio.setMood(want);
+  }
 
   render(ctx: CanvasRenderingContext2D): void {
     const g1 = this.ghost();
@@ -1230,21 +1259,14 @@ export class Game {
 
   // ---------- results ----------
 
-  results(): { won: boolean; time: string; opening: string; rows: [string, number, number][] } {
+  results(): MatchResults {
     const w = this.world;
-    const a = w.teams[PLAYER].stats;
-    const b = w.teams[ENEMY].stats;
     return {
       won: w.winner === PLAYER,
-      time: fmtTime(w.time),
+      time: w.time,
       opening: OPENINGS[this.bot.openingKey].name,
-      rows: [
-        ['Resources gathered', a.gathered, b.gathered],
-        ['Units trained', a.trained, b.trained],
-        ['Enemies killed', a.killed, b.killed],
-        ['Units lost', a.lost, b.lost],
-        ['Buildings destroyed', a.razed, b.razed],
-      ],
+      stats: [w.teams[PLAYER].stats, w.teams[ENEMY].stats],
+      history: w.history,
     };
   }
 
