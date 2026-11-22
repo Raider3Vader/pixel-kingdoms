@@ -1019,11 +1019,52 @@ function warBoat(px: Px, t: Team3, heavy: boolean): void {
   }
 }
 
+/** A transport: a wide, roofed river boat with a rower at the stern. Helmets show in the windows when troops are aboard. */
+function transportBoat(px: Px, team: number, aboard: number): void {
+  const t = TEAMS[team] ?? TEAMS[2];
+  const c = ROOF[team] ?? ROOF[2];
+  px(3, 20, 26, 2, 'rgba(10,30,60,0.35)');
+  px(2, 15, 27, 4, JP.wood);
+  px(1, 14, 29, 1, JP.woodL);
+  px(3, 19, 24, 1, JP.woodD);
+  px(28, 11, 2, 3, JP.woodL);
+  px(29, 10, 1, 1, JP.woodL);
+  px(1, 12, 2, 2, JP.woodL);
+  px(4, 16, 22, 1, t.m);
+  // the cabin: posts, paper windows and a curved team-coloured roof
+  px(6, 7, 17, 7, JP.shoji);
+  for (let x = 6; x <= 22; x += 4) px(x, 7, 1, 7, JP.wood);
+  for (let i = 0; i < 4; i++) {
+    const x = 8 + i * 4;
+    if (i < aboard) {
+      px(x, 9, 2, 2, JP.skin);
+      px(x, 8, 2, 1, JP.black);
+    } else px(x, 9, 2, 3, JP.shojiL);
+  }
+  px(5, 5, 19, 2, c.m);
+  px(4, 4, 21, 1, c.l);
+  px(3, 5, 2, 1, c.d);
+  px(24, 5, 2, 1, c.d);
+  px(5, 7, 19, 1, c.dd);
+  // rower with a long oar at the stern, and a banner at the bow
+  px(25, 8, 2, 5, t.m);
+  px(25, 6, 2, 2, JP.skin);
+  px(24, 5, 4, 1, JP.straw);
+  px(27, 9, 1, 8, JP.woodD);
+  px(2, 2, 1, 10, JP.woodD);
+  px(3, 2, 3, 4, t.m);
+  px(3, 2, 3, 1, t.l);
+}
+
 /** `tier` is the owner's age: 0 Dark, 1 Feudal, 2 Imperial. Soldiers look tougher each age. */
 export function unitSprite(type: string, team: number, pose: Pose, frame: number, carry: string, tier = 0): HTMLCanvasElement {
   const t = TEAMS[team] ?? TEAMS[2];
   if (type === 'scout') return make(`u:scout:${team}:${pose}:${frame}`, 20, 18, (px) => scout(px, t, pose, frame));
   if (type === 'fishingBoat') return make(`u:fboat:${team}`, 24, 15, (px) => fishingBoat(px, t));
+  if (type === 'transportBoat') {
+    const n = Math.min(4, Number(carry) || 0);
+    return make(`u:tboat:${team}:${n}`, 31, 22, (px) => transportBoat(px, team, n));
+  }
   if (type === 'warBoat') return make(`u:wboat:${team}:${tier >= 2 ? 1 : 0}`, 31, 26, (px) => warBoat(px, t, tier >= 2));
   if (type === 'samurai') return make(`u:sam:${team}:${pose}:${frame}:${tier >= 2 ? 1 : 0}`, 18, 18, (px) => samurai(px, t, pose, frame, tier >= 2));
   if (type === 'cavalry' && tier >= 2) return make(`u:hcav:${team}:${pose}:${frame}`, 22, 19, (px) => armored(px, t, pose, frame));
@@ -1039,7 +1080,7 @@ export function unitSprite(type: string, team: number, pose: Pose, frame: number
 
 export function corpseSprite(type: string, team: number): HTMLCanvasElement {
   const t = TEAMS[team] ?? TEAMS[2];
-  if (type === 'fishingBoat' || type === 'warBoat') {
+  if (type === 'fishingBoat' || type === 'warBoat' || type === 'transportBoat') {
     // a wreck: broken planks and a torn sail on the water
     return make(`c:wreck:${type}:${team}`, 24, 14, (px) => {
       px(2, 9, 8, 2, JP.wood);

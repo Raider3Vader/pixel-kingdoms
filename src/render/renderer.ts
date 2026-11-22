@@ -340,8 +340,8 @@ export function drawWorld(ctx: CanvasRenderingContext2D, w: World, terrain: HTML
     items.push({
       y: u.y,
       draw: () => {
-        const boat = u.type === 'fishingBoat' || u.type === 'warBoat';
-        const ring = boat ? (u.type === 'warBoat' ? 12 : 9) : u.type === 'cavalry' ? 7 : 5;
+        const boat = u.type === 'fishingBoat' || u.type === 'warBoat' || u.type === 'transportBoat';
+        const ring = boat ? (u.type === 'fishingBoat' ? 9 : 12) : u.type === 'cavalry' ? 7 : 5;
         if (o.selected.has(u.id)) ellipse(ctx, u.x, u.y + 1, ring, u.team === PLAYER ? PAL.white : PAL.orange);
         else if (o.hoverId === u.id) ellipse(ctx, u.x, u.y + 1, ring, PAL.silver);
         if (boat) {
@@ -352,7 +352,8 @@ export function drawWorld(ctx: CanvasRenderingContext2D, w: World, terrain: HTML
             const back = u.facing < 0 ? 1 : -1;
             for (let k = 1; k <= 3; k++) ctx.fillRect(Math.round(u.x + back * (8 + k * 3)), Math.round(u.y) + (k % 2) - 1, 2, 1);
           }
-          const spr = unitSprite(u.type, u.team, 'idle', 0, '', w.teams[u.team]?.age ?? 0);
+          const aboard = u.type === 'transportBoat' ? String(w.units.reduce((n, p) => n + (p.inside === u.id && !p.dead ? 1 : 0), 0)) : '';
+          const spr = unitSprite(u.type, u.team, 'idle', 0, aboard, w.teams[u.team]?.age ?? 0);
           drawFlipped(ctx, spr, Math.round(u.x) - Math.floor(spr.width / 2), Math.round(u.y) - spr.height + 4 + bob, u.facing < 0);
           return;
         }

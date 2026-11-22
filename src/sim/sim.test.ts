@@ -27,6 +27,10 @@ import {
   spawnResource,
   spawnUnit,
   spawnFish,
+  orderBoard,
+  orderUnload,
+  garrisoned,
+  kill,
   sailable,
   isNaval,
   step,
@@ -679,4 +683,50 @@ describe('boats', () => {
     expect(w.teams[ENEMY].stats.byKind.food).toBeGreaterThan(0);
     for (const u of w.units) if (isNaval(u)) expect(sailable(w, Math.floor(u.x / T), Math.floor(u.y / T))).toBe(true);
   }, 60_000);
+});
+
+describe('transport boats', () => {
+  function lakeWorld(): World {
+    const w = testWorld();
+    for (let y = 10; y <= 30; y++)
+      for (let x = 24; x <= 40; x++) {
+        w.water[y * w.w + x] = 1;
+        w.blocked[y * w.w + x] = 3;
+      }
+    return w;
+  }
+
+  it('troops board, sail across the water and land on the far shore', () => {
+    const w = lakeWorld();
+    const boat = spawnUnit(w, 'transportBoat', PLAYER, 32.5 * T, 20.5 * T);
+    const troops = [0, 1, 2].map((i) => spawnUnit(w, 'swordsman', PLAYER, 18.5 * T, (19 + i) * T));
+    troops.push(spawnUnit(w, 'villager', PLAYER, 18.5 * T, 22.5 * T));
+    // right-clicking the boat with them selected: it comes to the shore and they climb aboard
+    expect(smartOrder(w, troops, boat.x, boat.y, PLAYER, () => true)).toBe('move');
+    run(w, 25);
+    expect(garrisoned(w, boat).length).toBe(4);
+    // right-clicking land on the other side: sail over and let them off
+    expect(orderUnload(w, [boat], 46 * T, 20 * T)).toBe(true);
+    run(w, 30);
+    expect(garrisoned(w, boat).length).toBe(0);
+    for (const u of troops) {
+      expect(u.inside).toBe(0);
+      expect(u.x / T).toBeGreaterThan(40);
+      expect(w.isBlocked(Math.floor(u.x / T), Math.floor(u.y / T), PLAYER)).toBe(false);
+    }
+    expect(sailable(w, Math.floor(boat.x / T), Math.floor(boat.y / T))).toBe(true);
+  });
+
+  it('holds at most 8, and everyone aboard is lost if it sinks', () => {
+    const w = lakeWorld();
+    const boat = spawnUnit(w, 'transportBoat', PLAYER, 24.5 * T, 20.5 * T);
+    const troops = Array.from({ length: 10 }, (_, i) => spawnUnit(w, 'spearman', PLAYER, (21 + (i % 3)) * T, (18 + Math.floor(i / 3)) * T));
+    orderBoard(w, troops, boat);
+    run(w, 25);
+    expect(garrisoned(w, boat).length).toBe(8);
+    const aboard = garrisoned(w, boat);
+    kill(w, boat);
+    for (const u of aboard) expect(u.dead).toBe(true);
+    expect(troops.filter((u) => !u.dead).length).toBe(2);
+  });
 });

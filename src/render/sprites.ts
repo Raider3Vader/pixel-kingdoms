@@ -643,7 +643,19 @@ export function iconFor(type: string, team = 0, tier = 0): HTMLCanvasElement {
       if (type === 'form-box') px(7, 7, 2, 2, PAL.yellow);
     });
   }
-  if (['villager', 'swordsman', 'spearman', 'archer', 'cavalry', 'scout', 'samurai', 'fishingBoat', 'warBoat'].includes(type)) return unitSprite(type, team, 'idle', 0, '', tier);
+  if (['villager', 'swordsman', 'spearman', 'archer', 'cavalry', 'scout', 'samurai', 'fishingBoat', 'warBoat', 'transportBoat'].includes(type)) return unitSprite(type, team, 'idle', 0, type === 'transportBoat' ? '4' : '', tier);
+  if (type === 'unload') {
+    // a little boat with an arrow stepping onto the shore
+    return make('icon:unload', 16, 16, (px) => {
+      px(1, 10, 9, 3, PAL.wood);
+      px(0, 9, 11, 1, PAL.woodLight);
+      px(3, 6, 4, 3, PAL.sky);
+      px(11, 12, 5, 4, PAL.green);
+      px(9, 4, 4, 1, PAL.yellow);
+      px(12, 3, 1, 3, PAL.yellow);
+      px(13, 4, 1, 1, PAL.yellow);
+    });
+  }
   if (type === 'fish') return fishSprite(3, 0);
   if (type === 'tree') return treeSprite(0);
   if (type === 'berries') return berrySprite(6);

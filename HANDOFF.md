@@ -1,6 +1,6 @@
 # Pixel Kingdoms: handoff
 
-Read this first in a new chat. Last updated 2026-11-22, version **0.10.0**.
+Read this first in a new chat. Last updated 2026-11-22, version **0.10.1**.
 
 ## 1. Where everything is
 
@@ -24,7 +24,7 @@ Read this first in a new chat. Last updated 2026-11-22, version **0.10.0**.
 - **Keep Classic hidden.** Its art is still in `src/render/sprites.ts`, but `setTheme` always forces `sakura`, and the Theme menu option was removed on request.
 - Test UI changes in the browser at a desktop size and at a small or zoomed-in size (about 600 x 336). The owner's browser is zoomed to about 165%.
 
-## 3. What the game has (0.10.0)
+## 3. What the game has (0.10.1)
 
 - **Screens:** a title screen (a villager chased by a rider), a menu (difficulty, map: Rivers or Inland Sea, Controls, Open changelog, Sound, Music, Full screen), pause and an end screen with a stats table and graphs (army, villagers, resources over time; `src/stats.ts`, data from `World.history`, a snapshot every 10 s).
 - **Music:** made live in `src/audio.ts` (`Music`, `TRACKS`): a calm loop (D yo scale, koto, drone, flute) and a battle loop (E in scale, taiko). `Game.updateMood()` switches to battle after `MUSIC_MOOD` hits nearby and back to calm after a quiet spell. The game fills the whole window at a whole-number pixel scale.
@@ -44,7 +44,7 @@ Read this first in a new chat. Last updated 2026-11-22, version **0.10.0**.
   - Cavalry (Feudal, from the Stable), then Knight.
   - Scout (a fast sword rider; each side starts with one).
   - Samurai (Feudal, from the Pagoda), then Elite Samurai: bonus damage against swords, spears and archers.
-  - Fishing boat and War boat (from the Dock), then Heavy war boat. Boats are `naval` in `UNITS`.
+  - Fishing boat, War boat (then Heavy war boat) and Transport boat (carries 8, `carries` in `UNITS`), all from the Dock. Boats are `naval` in `UNITS`.
 - **Combat rules:** spears get a big bonus against all horses. Cavalry is a bit stronger than swords and faster. Archers do well against most things, but heavy armor reduces arrow damage, and archers do half damage in close quarters. Armor is shown as melee/arrow.
 - **Buildings:**
   - Town Center, House, Rice paddy, Storehouse, Barracks.
@@ -74,7 +74,8 @@ Read this first in a new chat. Last updated 2026-11-22, version **0.10.0**.
   - Difficulty changes how fast it decides and how many mistakes it makes; it never gets extra resources.
 - **Boats (how they work):** `isNaval`, `sailable`, `navGrid` and `blockedFor` in `world.ts`. Boats use their own pathfinding grid: open water, fords, sandbars and under bridges. `canFight` stops foot soldiers chasing boats; anything shooting across the waterline paths to "within range" (`pathToEntity` with a reach). When a fish tile is emptied it goes back to water (`kill`). Fishing boats count as food workers for the AI.
 - **The enemy and the new units:** on the Inland Sea it builds a Dock by the nearest fish, 2 to 5 fishing boats, and from the Feudal Age a few war boats that hunt enemy boats and Docks (`naval` in `bot.ts`). Boom and Rush add Samurai after their first attack. `bot.reserve` holds back troop training while it saves for a Pagoda or a war boat.
-- **Not built yet:** touch controls (the owner wants these later), monks (the owner wants them later), transport boats, and a Classic version of anything added after Classic was hidden.
+- **Transports:** passengers use `inside` like tower garrisons and ride along (`updateUnit`). Orders `board` and `unload`; `orderBoard` also brings the boat to the shore (`landingSpot`), `orderUnload` sails to the shore nearest a land point, `landPassengers` lets them off. Right-clicking your transport with land units boards; a loaded transport right-clicking land unloads (`smartOrder`). Passengers die with the boat. The AI does not use transports yet (it crosses on the sandbars).
+- **Not built yet:** touch controls (the owner wants these later), monks (the owner wants them later), and a Classic version of anything added after Classic was hidden.
 
 ## 4. Code map
 
@@ -89,7 +90,7 @@ Read this first in a new chat. Last updated 2026-11-22, version **0.10.0**.
 
 ## 5. Tools and tests
 
-- `npm test` runs 61 tests: economy, every combat matchup, ages, the market, gates, towers, repair, paddies, formations, queued orders, every river layout (mirrored and connected), and AI games including Hard beating Easy.
+- `npm test` runs 63 tests: economy, every combat matchup, ages, the market, gates, towers, repair, paddies, formations, queued orders, every river layout (mirrored and connected), and AI games including Hard beating Easy.
 - `npm run balance` plays every opening against every other (32 games, takes several minutes). The last run was fairly even, with games of about 11 to 22 minutes.
 - `npx tsx scripts/mappng.ts out.png 5 5:twin 5:sea` renders map overviews (`seed`, `seed:riverKind` or `seed:sea`). `scripts/showmap.ts` prints a map as text. `scripts/simulate.ts` traces one AI.
 - In the browser console, `pk()` returns the live Game. The built-in browser pane runs at about 1.5 fps when hidden, so drive time with `pk().update(1/60)` loops.

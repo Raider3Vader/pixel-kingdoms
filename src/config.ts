@@ -4,7 +4,7 @@
 export type ResKind = 'food' | 'wood' | 'gold' | 'stone';
 export const RES_KINDS: ResKind[] = ['food', 'wood', 'gold', 'stone'];
 export type Cost = Partial<Record<ResKind, number>>;
-export type UnitType = 'villager' | 'swordsman' | 'spearman' | 'archer' | 'cavalry' | 'scout' | 'samurai' | 'fishingBoat' | 'warBoat';
+export type UnitType = 'villager' | 'swordsman' | 'spearman' | 'archer' | 'cavalry' | 'scout' | 'samurai' | 'fishingBoat' | 'warBoat' | 'transportBoat';
 export type BuildingType =
   | 'townCenter'
   | 'storehouse'
@@ -130,7 +130,7 @@ export const BUILDINGS: Record<BuildingType, BuildingStats> = {
   guardTower: B({ name: 'Guard tower', cost: { wood: 50, stone: 125 }, age: 1, buildSec: 45, size: 1, hp: 700, sight: 10, attack: 5, attackSec: 1.5, rangeTiles: 7, garrison: 5 }),
   pagoda: B({ name: 'Pagoda', cost: { wood: 175, stone: 100 }, age: 1, buildSec: 50, size: 2, hp: 500, sight: 6, trains: ['samurai'] }),
   // built on the shore; boats are trained here and fishing boats bring their catch back to it
-  dock: B({ name: 'Dock', cost: { wood: 120 }, buildSec: 35, size: 2, hp: 300, sight: 6, trains: ['fishingBoat', 'warBoat'] }),
+  dock: B({ name: 'Dock', cost: { wood: 120 }, buildSec: 35, size: 2, hp: 300, sight: 6, trains: ['fishingBoat', 'warBoat', 'transportBoat'] }),
 };
 
 /** Watch tower to guard tower, done at the tower. */
@@ -170,6 +170,7 @@ export interface UnitStats {
   sight: number; // tiles
   bonus: Partial<Record<UnitType, number>>; // extra damage vs these units
   naval?: boolean; // sails on water instead of walking on land
+  carries?: number; // a transport: how many land units fit aboard
   vsBuildings: number; // damage multiplier against buildings
   tiers: [Tier, Tier, Tier]; // stats in the Dark, Feudal and Imperial Ages
 }
@@ -307,6 +308,21 @@ UNITS.warBoat = {
     { name: 'War boat', hp: 110, attack: 6, attackSec: 1.4, armor: 1, arrowArmor: 2 },
     { name: 'Heavy war boat', hp: 150, attack: 7, attackSec: 1.2, armor: 2, arrowArmor: 3, rangeTiles: 6 },
   ],
+};
+
+UNITS.transportBoat = {
+  name: 'Transport boat',
+  cost: { wood: 100 },
+  age: 0,
+  rangeTiles: 0,
+  speed: 2.0,
+  trainSec: 25,
+  sight: 6,
+  bonus: {},
+  vsBuildings: 0,
+  naval: true,
+  carries: 8,
+  tiers: same({ name: 'Transport boat', hp: 150, attack: 0, attackSec: 1, armor: 1, arrowArmor: 3 }),
 };
 
 /** Archers fighting an enemy right next to them do this share of their damage. */

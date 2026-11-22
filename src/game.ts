@@ -23,6 +23,8 @@ import {
   canAfford,
   cancelResearch,
   garrisoned,
+  capacityOf,
+  landPassengers,
   lineTiles,
   MAX_WALL,
   orderFormation,
@@ -87,6 +89,7 @@ const TIPS: Record<string, string> = {
   samurai: 'Elite swordsman: quick, heavy blows that cut down swordsmen, spearmen and archers. Costs gold.',
   fishingBoat: 'Catches fish out on the water and brings it back to a Dock. Cannot fight.',
   warBoat: 'Shoots arrows from the water at boats, troops and buildings near the shore. Strong against fishing boats.',
+  transportBoat: 'Carries up to 8 troops or villagers across the water. Right-click it with troops to load them; right-click land with it to sail over and unload. Anyone aboard is lost if it sinks.',
 };
 
 function icon(type: string, team: number, size: number, tier = 0): HTMLCanvasElement {
@@ -519,6 +522,25 @@ export class Game {
           this.buildPage = (this.buildPage + 1) % 3;
           this.mode = { kind: 'none' };
           this.audio.play('click');
+        },
+      });
+    } else if (sel.some((e) => capacityOf(e) > 0) && !soldiers.length) {
+      const ships = sel.filter((e) => capacityOf(e) > 0);
+      const n = ships.reduce((a, b) => a + garrisoned(w, b).length, 0);
+      out.push({
+        key: 'Z',
+        icon: 'unload',
+        label: 'Unload',
+        enabled: n > 0,
+        tip: 'Let everyone off onto the nearest shore here. Or right-click a spot on land: the boat sails to the closest shore and they walk on from there.',
+        run: () => {
+          let landed = 0;
+          for (const b of ships) landed += landPassengers(w, b);
+          if (landed) this.audio.play('command');
+          else {
+            this.audio.play('error');
+            this.toast(n ? 'Too far from the shore. Right-click land to sail there and unload.' : 'Nobody is aboard. Right-click the boat with troops to load them.');
+          }
         },
       });
     } else if (soldiers.length) {
@@ -1247,7 +1269,7 @@ export class Game {
       if (e.kind === 'unit') {
         const s = unitStats(e.type as UnitType, w.teams[e.team].age);
         // short names, grouped by size, so the line stays short: e.g. +3 vs swords/spears/archers
-        const SHORT: Partial<Record<UnitType, string>> = { villager: 'villagers', swordsman: 'swords', spearman: 'spears', archer: 'archers', cavalry: 'cavalry', scout: 'scouts', samurai: 'samurai', fishingBoat: 'fishers', warBoat: 'warships' };
+        const SHORT: Partial<Record<UnitType, string>> = { villager: 'villagers', swordsman: 'swords', spearman: 'spears', archer: 'archers', cavalry: 'cavalry', scout: 'scouts', samurai: 'samurai', fishingBoat: 'fishers', warBoat: 'warships', transportBoat: 'transports' };
         const groups = new Map<number, string[]>();
         for (const [k, v] of Object.entries(s.bonus)) {
           const n = Math.round(v * (s.bonusScale ?? 1));
@@ -1256,13 +1278,16 @@ export class Game {
         const bonus = [...groups].map(([n, names]) => `+${n} vs ${names.join('/')}`).join(' ');
         let task = '';
         const o = e.order;
-        if (o.type === 'gather') task = o.phase === 'drop' ? `Carrying ${Math.floor(e.carry)} ${e.carryKind ?? ''}` : `Gathering ${RESOURCES[o.resType].kind} (${Math.floor(e.carry)}/10)`;
+        const aboard = capacityOf(e) ? garrisoned(w, e).length : -1;
+        if (aboard >= 0) task = o.type === 'unload' ? `Landing ${aboard} troops` : `Aboard: ${aboard}/${capacityOf(e)}`;
+        else if (o.type === 'gather') task = o.phase === 'drop' ? `Carrying ${Math.floor(e.carry)} ${e.carryKind ?? ''}` : `Gathering ${RESOURCES[o.resType].kind} (${Math.floor(e.carry)}/${e.type === 'fishingBoat' ? 20 : 10})`;
+        else if (o.type === 'board') task = 'Boarding a boat';
         else if (o.type === 'build') task = 'Building';
         else if (o.type === 'repair') task = 'Repairing';
         else if (o.type === 'garrison') task = 'Heading into the tower';
         else if (o.type === 'attack') task = 'Fighting';
         else if (o.type === 'move') task = e.hostile ? 'Marching (hostile)' : 'Moving';
-        else task = e.type === 'villager' ? '<span class="warn">Idle</span>' : e.hostile ? 'On guard (hostile)' : 'Standing down';
+        else if (aboard < 0) task = e.type === 'villager' ? '<span class="warn">Idle</span>' : e.hostile ? 'On guard (hostile)' : 'Standing down';
         col.innerHTML = `<div class="sel-name">${s.name}${owner}</div><div>HP ${Math.ceil(e.hp)}/${Math.ceil(e.maxHp)}</div><div class="bar"><i style="width:${(e.hp / e.maxHp) * 100}%"></i></div>`;
         const more = document.createElement('div');
         more.innerHTML = `<div class="dim">Atk ${s.attack}${s.rangeTiles ? ` Rng ${s.rangeTiles}` : ''} Armor ${s.armor}/${s.arrowArmor} ${bonus}</div>${e.team === PLAYER ? `<div>${task}</div>` : ''}`;

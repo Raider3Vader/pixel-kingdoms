@@ -41,7 +41,9 @@ export type Order =
   | { type: 'build'; target: number; after: Order | null }
   | { type: 'attack'; target: number; after: Order | null }
   | { type: 'repair'; target: number }
-  | { type: 'garrison'; target: number };
+  | { type: 'garrison'; target: number }
+  | { type: 'board'; target: number; wait?: number } // walk onto a transport boat
+  | { type: 'unload'; x: number; y: number; landX: number; landY: number }; // sail to the shore near (x, y) and let everyone off
 
 export interface Entity {
   id: number;
@@ -269,7 +271,7 @@ function blank(w: World, kind: Kind, type: string, team: number, x: number, y: n
 
 export function spawnUnit(w: World, type: UnitType, team: number, x: number, y: number): Entity {
   const e = blank(w, 'unit', type, team, x, y, unitStats(type, w.teams[team]?.age ?? 0).hp);
-  e.hostile = type !== 'villager' && type !== 'scout' && type !== 'fishingBoat';
+  e.hostile = type !== 'villager' && type !== 'scout' && type !== 'fishingBoat' && type !== 'transportBoat';
   w.ents.set(e.id, e);
   w.units.push(e);
   return e;
@@ -337,7 +339,7 @@ export function spawnBuilding(w: World, type: BuildingType, team: number, tx: nu
 // ---------- queries ----------
 
 /** Villagers and fishing boats: they gather, and never go looking for a fight. */
-export const isWorker = (e: Entity): boolean => e.kind === 'unit' && (e.type === 'villager' || e.type === 'fishingBoat');
+export const isWorker = (e: Entity): boolean => e.kind === 'unit' && (e.type === 'villager' || e.type === 'fishingBoat' || e.type === 'transportBoat');
 export const isSoldier = (e: Entity): boolean => e.kind === 'unit' && !isWorker(e);
 /** Boats sail on water (and over shallow fords and sandbars) instead of walking. */
 export const isNaval = (e: Entity): boolean => e.kind === 'unit' && !!UNITS[e.type as UnitType]?.naval;
@@ -874,6 +876,22 @@ export function smartOrder(w: World, units: Entity[], x: number, y: number, team
   const mine = units.filter((u) => u.kind === 'unit' && u.team === team && !u.dead);
   if (mine.length === 0) return 'none';
   for (const u of mine) u.pending.length = 0;
+  // land units clicking one of your transports climb aboard
+  const ship = entityAt(w, x, y, (e) => e.kind === 'unit' && e.team === team && capacityOf(e) > 0);
+  const walkers = mine.filter((u) => !isNaval(u));
+  if (ship && walkers.length) {
+    orderBoard(w, walkers, ship);
+    return 'move';
+  }
+  // a loaded transport sent onto land sails to the nearest shore and lets everyone off
+  if (!sailable(w, tileOf(x), tileOf(y))) {
+    const loaded = mine.filter((u) => capacityOf(u) > 0 && garrisoned(w, u).length > 0);
+    if (loaded.length && orderUnload(w, loaded, x, y)) {
+      const rest = mine.filter((u) => !loaded.includes(u));
+      if (rest.length) orderMove(w, rest, x, y);
+      return 'move';
+    }
+  }
   const target = entityAt(w, x, y, (e) => canSee(e) && !(e.kind === 'unit' && e.team === team));
   if (target) {
     if (target.kind === 'resource') {
@@ -963,7 +981,7 @@ export function queueOrder(w: World, units: Entity[], x: number, y: number, team
 
 /** Where an order points, for drawing queue flags. */
 export function orderPoint(w: World, o: Order): Pt | null {
-  if (o.type === 'move') return { x: o.x, y: o.y };
+  if (o.type === 'move' || o.type === 'unload') return { x: o.x, y: o.y };
   if (o.type === 'idle') return null;
   const e = w.ents.get(o.target);
   return e && !e.dead ? { x: e.x, y: e.y } : null;
@@ -1135,6 +1153,7 @@ function reachFor(w: World, u: Entity): number {
 }
 
 function findEnemyNear(w: World, u: Entity, radius: number): Entity | null {
+  if (statsOf(w, u).attack <= 0) return null;
   let best: Entity | null = null;
   let bd = radius;
   const reach = reachFor(w, u);
@@ -1205,6 +1224,10 @@ export function kill(w: World, e: Entity, deleted = false): void {
   w.emit({ t: 'death', x: e.x, y: e.y, team: e.team, type: e.type, kind: e.kind, deleted });
   if (e.kind === 'unit' && e.team < 2) w.teams[e.team].stats.lost++;
   if (e.kind === 'building') ungarrison(w, e);
+  if (e.kind === 'unit' && UNITS[e.type as UnitType]?.carries) {
+    if (deleted) landPassengers(w, e);
+    for (const p of garrisoned(w, e)) kill(w, p); // still aboard: lost with the boat
+  }
   if (e.kind !== 'unit') {
     const size = e.kind === 'building' ? e.size : 1;
     for (let y = e.ty; y < e.ty + size; y++) {
@@ -1535,6 +1558,133 @@ export function ungarrison(w: World, b: Entity): void {
   }
 }
 
+// ---------- transport boats ----------
+
+export const capacityOf = (e: Entity): number => (e.kind === 'unit' ? (UNITS[e.type as UnitType]?.carries ?? 0) : 0);
+
+/** A water tile right next to the shore, as close as possible to (x, y), or null. */
+export function landingSpot(w: World, x: number, y: number, maxR = 14): Pt | null {
+  const cx = tileOf(x);
+  const cy = tileOf(y);
+  for (let r = 0; r <= maxR; r++) {
+    let best: Pt | null = null;
+    let bd = Infinity;
+    for (let dy = -r; dy <= r; dy++)
+      for (let dx = -r; dx <= r; dx++) {
+        if (Math.max(Math.abs(dx), Math.abs(dy)) !== r) continue;
+        const tx = cx + dx;
+        const ty = cy + dy;
+        if (!sailable(w, tx, ty)) continue;
+        let shore = false;
+        for (const [ax, ay] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) if (!w.isBlocked(tx + ax, ty + ay) && !sailable(w, tx + ax, ty + ay)) shore = true;
+        if (!shore) continue;
+        const d = dx * dx + dy * dy;
+        if (d < bd) {
+          bd = d;
+          best = { x: tx, y: ty };
+        }
+      }
+    if (best) return best;
+  }
+  return null;
+}
+
+/**
+ * Land units walk aboard a transport. If it is out on the water, the boat
+ * comes to the shore nearest them first.
+ */
+export function orderBoard(w: World, units: Entity[], boat: Entity): void {
+  const riders = units.filter((u) => u.kind === 'unit' && !u.dead && !isNaval(u) && u.team === boat.team && !u.inside);
+  if (!riders.length || !capacityOf(boat)) return;
+  for (const u of riders) setOrder(u, { type: 'board', target: boat.id });
+  const cx = riders.reduce((a, u) => a + u.x, 0) / riders.length;
+  const cy = riders.reduce((a, u) => a + u.y, 0) / riders.length;
+  const spot = landingSpot(w, cx, cy);
+  if (spot && Math.hypot((spot.x + 0.5) * T - boat.x, (spot.y + 0.5) * T - boat.y) > T) setOrder(boat, { type: 'move', x: (spot.x + 0.5) * T, y: (spot.y + 0.5) * T, attackMove: false });
+}
+
+/** Sail to the shore nearest (x, y) and let everyone off there; they walk on to (x, y). */
+export function orderUnload(w: World, boats: Entity[], x: number, y: number): boolean {
+  let any = false;
+  for (const b of boats) {
+    if (!capacityOf(b) || b.dead || !garrisoned(w, b).length) continue;
+    const spot = landingSpot(w, x, y, 20);
+    if (!spot) continue;
+    setOrder(b, { type: 'unload', x, y, landX: (spot.x + 0.5) * T, landY: (spot.y + 0.5) * T });
+    any = true;
+  }
+  return any;
+}
+
+/** Everyone aboard steps onto open land near the boat. Returns how many got off. */
+export function landPassengers(w: World, boat: Entity, walkTo?: { x: number; y: number }): number {
+  let n = 0;
+  for (const u of garrisoned(w, boat)) {
+    const f = nearestFree(w, tileOf(boat.x), tileOf(boat.y), 3, u.team);
+    if (!f) break;
+    u.inside = 0;
+    u.x = (f.x + 0.5) * T + (n % 3) * 2 - 2;
+    u.y = (f.y + 0.5) * T + (Math.floor(n / 3) % 3) * 2 - 2;
+    u.path = [];
+    setOrder(u, walkTo && Math.hypot(walkTo.x - u.x, walkTo.y - u.y) > 2 * T ? { type: 'move', x: walkTo.x, y: walkTo.y, attackMove: isSoldier(u) } : { type: 'idle' });
+    n++;
+  }
+  return n;
+}
+
+function boardStep(w: World, u: Entity, dt: number): void {
+  const o = u.order as Extract<Order, { type: 'board' }>;
+  const boat = w.get(o.target);
+  if (!boat || boat.team !== u.team || garrisoned(w, boat).length >= capacityOf(boat)) {
+    setOrder(u, { type: 'idle' });
+    return;
+  }
+  if ((o.wait ?? 0) > 0) {
+    o.wait! -= dt;
+    return;
+  }
+  const r = approach(w, u, boat, 1.7 * T, dt);
+  if (r === 'stuck') {
+    // the boat is still on its way to the shore: wait a moment, then try again
+    u.path = [];
+    o.wait = 0.5;
+    return;
+  }
+  if (r === 'there') {
+    u.inside = boat.id;
+    u.x = boat.x;
+    u.y = boat.y;
+    u.pending.length = 0;
+    setOrder(u, { type: 'idle' });
+  }
+}
+
+function unloadStep(w: World, u: Entity, dt: number): void {
+  const o = u.order as Extract<Order, { type: 'unload' }>;
+  if (!garrisoned(w, u).length) {
+    setOrder(u, { type: 'idle' });
+    return;
+  }
+  if (Math.hypot(u.x - o.landX, u.y - o.landY) < T * 0.75) {
+    landPassengers(w, u, { x: o.x, y: o.y });
+    setOrder(u, { type: 'idle' });
+    return;
+  }
+  if (u.path.length === 0 && u.goalX < 0) {
+    if (!pathToPoint(w, u, o.landX, o.landY)) {
+      setOrder(u, { type: 'idle' });
+      return;
+    }
+    u.goalX = o.landX;
+    u.goalY = o.landY;
+  }
+  if (followPath(w, u, dt) && Math.hypot(u.x - o.landX, u.y - o.landY) >= T * 0.75) {
+    // could not get right there: let them off wherever this is, if there is land close by
+    landPassengers(w, u, { x: o.x, y: o.y });
+    setOrder(u, { type: 'idle' });
+  }
+}
+
 export function orderGarrison(w: World, units: Entity[], b: Entity): void {
   for (const u of units) if (u.kind === 'unit' && isSoldier(u) && !isNaval(u) && u.team === b.team && !u.dead) setOrder(u, { type: 'garrison', target: b.id });
   void w;
@@ -1547,7 +1697,12 @@ export function orderRepair(w: World, units: Entity[], b: Entity): void {
 
 function updateUnit(w: World, u: Entity, dt: number): void {
   if (u.inside) {
-    // garrisoned: safe inside, does nothing
+    // garrisoned or aboard a boat: safe inside, does nothing (and rides along with the boat)
+    const c = w.get(u.inside);
+    if (c && c.kind === 'unit') {
+      u.x = c.x;
+      u.y = c.y;
+    }
     u.anim = 'idle';
     return;
   }
@@ -1610,6 +1765,12 @@ function updateUnit(w: World, u: Entity, dt: number): void {
       break;
     case 'garrison':
       garrisonStep(w, u, dt);
+      break;
+    case 'board':
+      boardStep(w, u, dt);
+      break;
+    case 'unload':
+      unloadStep(w, u, dt);
       break;
   }
 }

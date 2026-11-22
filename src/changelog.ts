@@ -9,6 +9,17 @@ export interface ChangelogEntry {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    version: '0.10.1',
+    date: '2026-11-22',
+    title: 'Transport boats',
+    items: [
+      'New boat: the Transport boat (100 wood, from the Dock). It carries up to 8 troops or villagers across the water.',
+      'To load: select land units and right-click your transport. If it is out on the water, it sails to the nearest shore and they climb aboard. Their helmets show in the cabin windows.',
+      'To land them: with the transport selected, right-click a spot on land. It sails to the closest shore, lets everyone off, and they walk on to where you clicked. Press Z (Unload) to let them off right where it is.',
+      'Anyone aboard is lost if the transport sinks. If you delete it next to the shore, they step off first.',
+    ],
+  },
+  {
     version: '0.10.0',
     date: '2026-11-22',
     title: 'Samurai and boats',
