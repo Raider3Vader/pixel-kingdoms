@@ -89,13 +89,25 @@ button:focus-visible {
   height: calc(12px * var(--s));
   display: flex;
   align-items: center;
-  gap: calc(10px * var(--s));
+  gap: calc(8px * var(--s));
   padding: 0 calc(4px * var(--s));
+  white-space: nowrap;
   background: var(--panel);
   border-bottom: calc(1px * var(--s)) solid var(--edge);
 }
 #topbar .spacer {
   flex: 1;
+}
+/* a narrow window: tighter spacing and shorter labels so everything fits on one line */
+#topbar.compact {
+  gap: calc(4px * var(--s));
+  padding: 0 calc(2px * var(--s));
+}
+#topbar.compact .res {
+  gap: calc(1px * var(--s));
+}
+#topbar.compact .idle-word {
+  display: none;
 }
 #topbar button {
   padding: 0 calc(4px * var(--s));
@@ -109,6 +121,10 @@ button:focus-visible {
 }
 .res b {
   font-weight: normal;
+}
+.res b.workers {
+  color: var(--dim);
+  margin-left: calc(-1px * var(--s));
 }
 .sw {
   display: inline-block;

@@ -9,6 +9,15 @@ export interface ChangelogEntry {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    version: '0.8.2',
+    date: '2026-11-22',
+    title: 'Villager counts',
+    items: [
+      'The top bar shows how many villagers are gathering each resource, in brackets after the amount, e.g. 350 (6).',
+      'On small or zoomed-in windows the top bar squeezes its spacing and shortens labels (Feudal instead of Feudal Age) so it stays on one line.',
+    ],
+  },
+  {
     version: '0.8.1',
     date: '2026-11-22',
     title: 'One farmer per paddy',

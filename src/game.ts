@@ -2,7 +2,7 @@
 
 import type { MatchResults } from './stats';
 import { Audio } from './audio';
-import { AGES, BUILDINGS, MAP, MARKET, RESOURCES, OPENINGS, RENDER, SIM, TOWER_UPGRADE, UNITS, costText, unitStats, type BuildingType, type Cost, type DifficultyKey, type UnitType, MUSIC_MOOD } from './config';
+import { AGES, BUILDINGS, MAP, MARKET, RESOURCES, OPENINGS, RENDER, SIM, TOWER_UPGRADE, UNITS, costText, unitStats, type BuildingType, type Cost, type DifficultyKey, type ResKind, type UnitType, MUSIC_MOOD } from './config';
 import { buildingPos, buildTerrain, drawMinimap, drawWorld, Effects, type Camera, type Ghost } from './render/renderer';
 import { buildingSprite, iconFor } from './render/sprites';
 import { createBot, updateBot, type Bot } from './sim/bot';
@@ -1129,12 +1129,18 @@ export class Game {
   private renderHud(): void {
     const w = this.world;
     const t = w.teams[PLAYER];
-    $('r-food').textContent = String(Math.floor(t.food));
-    $('r-wood').textContent = String(Math.floor(t.wood));
-    $('r-gold').textContent = String(Math.floor(t.gold));
-    $('r-stone').textContent = String(Math.floor(t.stone));
+    // how many villagers work each resource, shown in brackets after the amount
+    const workers: Record<ResKind, number> = { food: 0, wood: 0, gold: 0, stone: 0 };
+    for (const u of w.units) if (u.team === PLAYER && u.type === 'villager' && u.order.type === 'gather') workers[RESOURCES[u.order.resType].kind]++;
+    for (const k of ['food', 'wood', 'gold', 'stone'] as ResKind[]) {
+      $(`r-${k}`).textContent = String(Math.floor(t[k]));
+      $(`n-${k}`).textContent = `(${workers[k]})`;
+    }
     const adv = w.buildings.find((b) => b.team === PLAYER && b.research?.key === 'age');
-    $('r-age').textContent = adv ? `${AGES[t.age].name} → ${Math.floor((adv.research!.t / adv.research!.sec) * 100)}%` : AGES[t.age].name;
+    const compact = RENDER.width < 780;
+    $('topbar').classList.toggle('compact', compact);
+    const ageName = compact ? AGES[t.age].name.replace(' Age', '') : AGES[t.age].name;
+    $('r-age').textContent = adv ? `${ageName} → ${Math.floor((adv.research!.t / adv.research!.sec) * 100)}%` : ageName;
     const pop = $('r-pop');
     pop.textContent = `${t.popUsed}/${t.popCap}`;
     pop.classList.toggle('capped', t.popUsed >= t.popCap);
