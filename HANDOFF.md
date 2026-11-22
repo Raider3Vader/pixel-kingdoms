@@ -1,6 +1,6 @@
 # Pixel Kingdoms: handoff
 
-Read this first in a new chat. Last updated 2026-11-22, version **0.9.1**.
+Read this first in a new chat. Last updated 2026-11-22, version **0.9.2**.
 
 ## 1. Where everything is
 
@@ -24,7 +24,7 @@ Read this first in a new chat. Last updated 2026-11-22, version **0.9.1**.
 - **Keep Classic hidden.** Its art is still in `src/render/sprites.ts`, but `setTheme` always forces `sakura`, and the Theme menu option was removed on request.
 - Test UI changes in the browser at a desktop size and at a small or zoomed-in size (about 600 x 336). The owner's browser is zoomed to about 165%.
 
-## 3. What the game has (0.9.1)
+## 3. What the game has (0.9.2)
 
 - **Screens:** a title screen (a villager chased by a rider), a menu (difficulty, map: Rivers or Inland Sea, Controls, Open changelog, Sound, Music, Full screen), pause and an end screen with a stats table and graphs (army, villagers, resources over time; `src/stats.ts`, data from `World.history`, a snapshot every 10 s).
 - **Music:** made live in `src/audio.ts` (`Music`, `TRACKS`): a calm loop (D yo scale, koto, drone, flute) and a battle loop (E in scale, taiko). `Game.updateMood()` switches to battle after `MUSIC_MOOD` hits nearby and back to calm after a quiet spell. The game fills the whole window at a whole-number pixel scale.
@@ -55,7 +55,7 @@ Read this first in a new chat. Last updated 2026-11-22, version **0.9.1**.
   - Shift + right-click queues orders, shown with flags. Double-click selects all of a type (double-clicking a building selects all of that building, and a train key queues one unit in each).
   - Z X C V B N are the command buttons; F switches a villager's build page between buildings and walls/towers.
   - Soldier commands: Z line, X block, C box formation; V Hostile on/off; B Stand down.
-  - H selects the Town Center, Q the next idle villager. Ctrl + 1-9 saves a group and 1-9 selects it. Space jumps to the last alert. M mutes, Esc pauses.
+  - H selects the Town Center, Q the next idle villager. Ctrl + 1-9 saves a group, 1-9 selects it, and Shift + 1-9 adds it to the selection. Space jumps to the last alert. M mutes, Esc pauses.
   - Walls: click a start tile, then an end tile. A gate placed on your own wall piece swaps in (`wallUnder`).
   - Delete or Backspace destroys your selection (`deleteOwn`): unfinished buildings refund the unbuilt part, and the last Town Center is protected.
 - **Maps:** chosen on the menu (`MapKind` in `src/sim/map.ts`, saved as `pk-map`).

@@ -875,7 +875,15 @@ export class Game {
       const b = (e.target as HTMLElement).closest('button');
       if (!b) return;
       e.preventDefault();
-      if (b.dataset.q !== undefined) {
+      if (b.dataset.r !== undefined) {
+        const bld = this.selected[0];
+        if (bld?.research && bld.team === PLAYER) {
+          cancelResearch(this.world, bld);
+          this.toast('Cancelled.');
+          this.audio.play('click');
+          this.cmdKey = '-';
+        }
+      } else if (b.dataset.q !== undefined) {
         const bld = this.selected[0];
         if (bld) {
           cancelTrain(this.world, bld, Number(b.dataset.q));
@@ -1086,7 +1094,9 @@ export class Game {
         const list = ids.map((id) => this.world.get(id)).filter((x): x is Entity => !!x);
         if (list.length) {
           const now = performance.now();
-          this.select(list);
+          // Shift + number adds the group to what is already selected
+          if (e.shiftKey) this.select(Array.from(new Set([...this.mySel(), ...list])));
+          else this.select(list);
           if (this.lastGroupKey.n === n && now - this.lastGroupKey.t < 400) this.centerOn(list[0].x, list[0].y);
           this.lastGroupKey = { n, t: now };
         }
@@ -1253,8 +1263,21 @@ export class Game {
       if (e.team !== PLAYER) return;
       if (e.research) {
         const info2 = researchInfo(w, e, e.research.key);
-        const label = e.research.key === 'age' ? (info2?.name ?? 'Advancing').replace('Advance to the ', 'To ') : e.research.key === 'merchant' ? 'Hiring a merchant' : 'Upgrading';
-        info.insertAdjacentHTML('beforeend', `<div>${label} ${Math.floor((e.research.t / e.research.sec) * 100)}%</div><div class="bar prog"><i style="width:${(e.research.t / e.research.sec) * 100}%"></i></div>`);
+        const key = e.research.key;
+        const label = key === 'age' ? (info2?.name ?? 'Advancing').replace('Advance to the ', 'To ') : key === 'merchant' ? 'Merchant' : 'Guard tower';
+        const pct = e.research.t / e.research.sec;
+        // like a training queue: the box with its picture cancels it when clicked
+        const q = document.createElement('div');
+        q.className = 'queue research';
+        const b = document.createElement('button');
+        b.dataset.r = '1';
+        b.title = 'Click to cancel';
+        b.appendChild(icon(key === 'age' ? (w.teams[PLAYER].age === 0 ? 'age-feudal' : 'age-imperial') : key === 'merchant' ? 'merchant' : 'guardTower', PLAYER, 16, w.teams[PLAYER].age));
+        q.appendChild(b);
+        const txt = document.createElement('div');
+        txt.innerHTML = `<div>${label} ${Math.floor(pct * 100)}%</div><div class="bar prog"><i style="width:${pct * 100}%"></i></div>`;
+        q.appendChild(txt);
+        info.appendChild(q);
         return;
       }
       if (s.garrison) info.insertAdjacentHTML('beforeend', `<div>${garrisoned(w, e).length}/${s.garrison} inside. Archers add arrows.</div>`);

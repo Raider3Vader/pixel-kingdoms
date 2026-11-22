@@ -9,6 +9,15 @@ export interface ChangelogEntry {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    version: '0.9.2',
+    date: '2026-11-22',
+    title: 'Cancel boxes and adding groups',
+    items: [
+      'While a merchant is being hired (or an age or tower upgrade is under way), the panel shows a box with its picture. Click the box to cancel, just like cancelling units in a training queue.',
+      'Hold Shift and press a group number to add that group to what you already have selected. For example, press 1, then Shift + 2 to select both groups.',
+    ],
+  },
+  {
     version: '0.9.1',
     date: '2026-11-22',
     title: 'Tidier bottom panel',

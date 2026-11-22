@@ -294,6 +294,12 @@ button:focus-visible {
   width: calc(16px * var(--s));
   height: calc(16px * var(--s));
 }
+.queue.research > div {
+  flex: 1;
+}
+.queue.research .bar {
+  width: 100%;
+}
 .group {
   display: flex;
   flex-wrap: wrap;
