@@ -9,6 +9,17 @@ export interface ChangelogEntry {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    version: '0.9.1',
+    date: '2026-11-22',
+    title: 'Tidier bottom panel',
+    items: [
+      'Fixed: text ran off the bottom of the panel while the Market hired a merchant.',
+      'While something is being researched (a merchant, an age, a tower upgrade), its button now says Cancel in red. Press it to stop.',
+      'Buttons that cost three resources (like the merchant) use a smaller picture so all three costs fit.',
+      'An age advance shows as "To Imperial Age 45%" so it fits on one line.',
+    ],
+  },
+  {
     version: '0.9.0',
     date: '2026-11-22',
     title: 'Inland Sea',

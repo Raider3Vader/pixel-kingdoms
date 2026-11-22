@@ -56,6 +56,7 @@ interface Cmd {
   locked?: boolean; // needs a later age
   enabled: boolean;
   active?: boolean;
+  cancels?: boolean; // while active, pressing it again cancels (the button then reads Cancel)
   tip: string;
   run: () => void;
 }
@@ -596,6 +597,7 @@ export class Game {
           cost: next.cost,
           enabled: !researching && canAfford(w, PLAYER, next.cost),
           active: researching,
+          cancels: true,
           tip: `Advance to the ${next.name} (${next.sec} s). ${team.age === 0 ? 'Unlocks Archers, the Stable, the Market, stone walls and guard towers. Soldiers get stronger.' : 'Champions, Halberdiers, Longbowmen and Knights.'}`,
           run: () => this.research(ready[0], 'age'),
         });
@@ -625,6 +627,7 @@ export class Game {
           cost: MARKET.merchantCost,
           enabled: team.merchants < MARKET.maxMerchants && !ready.some((b) => b.research) && canAfford(w, PLAYER, MARKET.merchantCost),
           active: ready.some((b) => b.research?.key === 'merchant'),
+          cancels: true,
           tip: `Hire a merchant: +${MARKET.merchantPerSec} gold per second from trade. Up to ${MARKET.maxMerchants}.`,
           run: () => this.research(ready[0], 'merchant'),
         });
@@ -670,6 +673,7 @@ export class Game {
           locked: team.age < 1,
           enabled: team.age >= 1 && !ready[0].research && canAfford(w, PLAYER, TOWER_UPGRADE.cost),
           active: !!ready[0].research,
+          cancels: true,
           tip: (team.age < 1 ? lockedTip(1) + ' ' : '') + 'Turn it into a stone guard tower that shoots arrows and holds 5 troops.',
           run: () => this.research(ready[0], 'towerUpgrade'),
         });
@@ -1177,6 +1181,12 @@ export class Game {
         const b = document.createElement('button');
         b.className = `cmd${c.enabled ? '' : ' off'}${c.active ? ' on' : ''}${c.locked ? ' locked' : ''}`;
         b.dataset.i = String(i);
+        const cancel = !!(c.active && c.cancels);
+        const parts = c.cost ? Object.values(c.cost).filter((v) => (v ?? 0) > 0).length : 0;
+        // three costs need three lines: a smaller icon makes room for them
+        if (parts >= 3 && !cancel && !c.locked && !c.status) b.classList.add('long-cost');
+        if (cancel) b.classList.add('cancel');
+        if (cancel) b.classList.remove('off'); // a running job can always be cancelled
         b.appendChild(icon(c.icon, PLAYER, 24, this.world.teams[PLAYER].age));
         const k = document.createElement('span');
         k.className = 'key';
@@ -1184,7 +1194,7 @@ export class Game {
         b.appendChild(k);
         const cost = document.createElement('span');
         cost.className = 'cost';
-        cost.textContent = c.locked ? 'Locked' : c.status ? `${c.label} ${c.status}` : c.cost && Object.keys(c.cost).length ? shortCost(c.cost) : c.label;
+        cost.textContent = cancel ? 'Cancel' : c.locked ? 'Locked' : c.status ? `${c.label} ${c.status}` : c.cost && Object.keys(c.cost).length ? shortCost(c.cost) : c.label;
         b.appendChild(cost);
         box.appendChild(b);
       });
@@ -1243,8 +1253,8 @@ export class Game {
       if (e.team !== PLAYER) return;
       if (e.research) {
         const info2 = researchInfo(w, e, e.research.key);
-        const label = e.research.key === 'age' ? info2?.name ?? 'Advancing' : e.research.key === 'merchant' ? 'Hiring a merchant' : 'Upgrading';
-        info.insertAdjacentHTML('beforeend', `<div>${label} ${Math.floor((e.research.t / e.research.sec) * 100)}%</div><div class="bar prog"><i style="width:${(e.research.t / e.research.sec) * 100}%"></i></div><div class="dim">Press its button again to cancel.</div>`);
+        const label = e.research.key === 'age' ? (info2?.name ?? 'Advancing').replace('Advance to the ', 'To ') : e.research.key === 'merchant' ? 'Hiring a merchant' : 'Upgrading';
+        info.insertAdjacentHTML('beforeend', `<div>${label} ${Math.floor((e.research.t / e.research.sec) * 100)}%</div><div class="bar prog"><i style="width:${(e.research.t / e.research.sec) * 100}%"></i></div>`);
         return;
       }
       if (s.garrison) info.insertAdjacentHTML('beforeend', `<div>${garrisoned(w, e).length}/${s.garrison} inside. Archers add arrows.</div>`);

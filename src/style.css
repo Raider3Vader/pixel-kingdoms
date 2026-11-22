@@ -221,6 +221,17 @@ button:focus-visible {
   text-align: center;
   line-height: 1.15;
 }
+.cmd.long-cost canvas {
+  width: calc(12px * var(--s)) !important;
+  height: calc(12px * var(--s)) !important;
+  margin-top: calc(1px * var(--s));
+}
+.cmd.long-cost .cost {
+  line-height: 1.05;
+}
+.cmd.cancel .cost {
+  color: var(--bad);
+}
 .cmd.off {
   opacity: 0.45;
 }
