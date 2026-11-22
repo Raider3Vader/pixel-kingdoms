@@ -38,8 +38,117 @@ export const RIVERS: Record<RiverKind, RiverLayout> = {
   fords: { name: 'Wide river with fords', streams: [0], amp: 3, freq: 12, width: 2.6, crossings: [0, -18, 18, -36, 36], crossWidth: 2.2, fords: true, lake: 0 },
 };
 
-export function createMatch(seed: number, opts: { river?: RiverKind } = {}): Setup {
+/** The kinds of map on offer. 'rivers' picks one of the river layouts; 'inlandSea' is islands. */
+export type MapKind = 'rivers' | 'inlandSea';
+export const MAPS: Record<MapKind, { name: string; hint: string }> = {
+  rivers: { name: 'Rivers', hint: 'One big land split by a river, with bridges or fords.' },
+  inlandSea: { name: 'Inland Sea', hint: 'Home islands joined to rich islets by shallow sandbars.' },
+};
+
+/**
+ * The Inland Sea: each side has a large home island in its corner and a
+ * private back island (gold and stone) off its coast. Two small islets and a
+ * central island sit in the sea between them. Shallow sandbars, walkable like
+ * fords, join home to back island, home to each islet, and each islet to the
+ * centre: the choke points of this map. Defined for the top-left half and
+ * mirrored, so both sides are equal.
+ */
+const SEA = {
+  // [x, y, radius] of the land blobs in the top-left half (each is also mirrored)
+  blobs: [
+    [14, 14, 24], // home island
+    [38, 6, 10], // its northern arm
+    [6, 38, 10], // its western arm
+    [77, 14, 11], // the back island
+    [30, 51, 5], // islet
+    [51, 30, 5], // islet
+    [47.5, 47.5, 8.5], // the central island (its own mirror)
+  ] as [number, number, number][],
+  // sandbars: [x0, y0, x1, y1]
+  bars: [
+    [45, 7, 67, 12], // home to back island
+    [11, 44, 27, 49], // home to the west islet
+    [44, 11, 49, 27], // home to the north islet
+    [34, 50, 41, 48], // west islet to the centre
+    [50, 34, 48, 41], // north islet to the centre
+  ] as [number, number, number, number][],
+};
+
+/** Lays out the Inland Sea's water and sandbars. Returns land (1) per tile. */
+function makeSea(w: World, rand: () => number): Uint8Array {
+  const N = w.w;
+  const land = new Uint8Array(N * N);
+  const blobs = SEA.blobs.flatMap(([x, y, r]) => [
+    [x, y, r],
+    [N - x, N - y, r],
+  ]);
+  const phase = SEA.blobs.map(() => [rand() * 6.28, rand() * 6.28]);
+  for (let y = 0; y < N; y++) {
+    for (let x = 0; x < N; x++) {
+      if (x + y > N - 1 || (x + y === N - 1 && x >= N / 2)) continue; // the other half is mirrored below
+      const px = x + 0.5;
+      const py = y + 0.5;
+      let on = false;
+      for (let b = 0; b < blobs.length && !on; b++) {
+        const [bx, by, r] = blobs[b];
+        const [p1, p2] = phase[b >> 1];
+        const a = Math.atan2(py - by, px - bx);
+        const edge = r + Math.sin(a * 3 + p1) * (0.6 + r * 0.06) + Math.cos(a * 5 + p2) * 0.7 + Math.sin(px * 0.9 + py * 0.7) * 0.4;
+        if (Math.hypot(px - bx, py - by) < edge) on = true;
+      }
+      if (on) land[y * N + x] = 1;
+    }
+  }
+  for (let y = 0; y < N; y++) {
+    for (let x = 0; x < N; x++) {
+      if (x + y > N - 1 || (x + y === N - 1 && x >= N / 2)) {
+        const [mx, my] = mirror(w, x, y);
+        land[y * N + x] = land[my * N + mx];
+      }
+    }
+  }
+  for (let i = 0; i < N * N; i++) {
+    if (!land[i]) {
+      w.water[i] = 1;
+      w.blocked[i] = 3;
+    }
+  }
+  // the sandbars: 3 tiles wide, wobbling a little, on both halves
+  const bar = (x0: number, y0: number, x1: number, y1: number): void => {
+    const len = Math.hypot(x1 - x0, y1 - y0);
+    const nx = -(y1 - y0) / len;
+    const ny = (x1 - x0) / len;
+    for (let k = 0; k <= len * 3; k++) {
+      const t = k / (len * 3);
+      const wob = Math.sin(t * Math.PI * 2) * 1.2;
+      const cx = x0 + (x1 - x0) * t + nx * wob;
+      const cy = y0 + (y1 - y0) * t + ny * wob;
+      for (let dy = -2; dy <= 2; dy++) {
+        for (let dx = -2; dx <= 2; dx++) {
+          const tx = Math.floor(cx + dx);
+          const ty = Math.floor(cy + dy);
+          if (!w.inBounds(tx, ty) || Math.hypot(tx + 0.5 - cx, ty + 0.5 - cy) > 1.6) continue;
+          for (const [qx, qy] of [
+            [tx, ty],
+            mirror(w, tx, ty),
+          ]) {
+            const i = qy * N + qx;
+            if (!w.water[i]) continue;
+            w.water[i] = 0;
+            w.blocked[i] = 0;
+            w.bridge[i] = 2;
+          }
+        }
+      }
+    }
+  };
+  for (const [x0, y0, x1, y1] of SEA.bars) bar(x0, y0, x1, y1);
+  return land;
+}
+
+export function createMatch(seed: number, opts: { river?: RiverKind; map?: MapKind } = {}): Setup {
   const w = new World(seed);
+  const sea = opts.map === 'inlandSea';
   const N = w.w;
   const forest = new Uint8Array(N * N);
   const tcC = { x: PLAYER_TC.tx + 1.5, y: PLAYER_TC.ty + 1.5 };
@@ -56,6 +165,7 @@ export function createMatch(seed: number, opts: { river?: RiverKind } = {}): Set
 
   // a thick forest belt across each half, between the village and the middle,
   // with two or three narrow gaps: the choke points into each village's land
+  if (!sea) {
   const beltAt = 34 + Math.floor(rand() * 6); // tiles along the diagonal from the corner
   const gapCount = 2 + (rand() < 0.5 ? 1 : 0);
   const gaps: number[] = [];
@@ -90,13 +200,18 @@ export function createMatch(seed: number, opts: { river?: RiverKind } = {}): Set
       break;
     }
   }
+  } // not on the sea map
+
+  const land = sea ? makeSea(w, rand) : null;
+  if (sea) w.river = 'sea';
 
   // and some light, scattered woods; the rest stays open meadow
-  for (let i = 0; i < 10; i++) {
+  for (let i = 0; i < (sea ? 16 : 10); i++) {
     for (let tries = 0; tries < 30; tries++) {
       const cx = 4 + rand() * (N - 8);
       const cy = 4 + rand() * (N - 8);
       if (cx + cy > N - 2) continue; // top-left half only; it is mirrored below
+      if (land && (!land[Math.floor(cy) * N + Math.floor(cx)] || Math.hypot(cx - 14, cy - 14) > 26)) continue; // home island only: islets stay open
       const dBase = Math.hypot(cx - tcC.x, cy - tcC.y);
       const dEnemy = Math.hypot(cx - enemyC.x, cy - enemyC.y);
       if (dBase < 18 || dEnemy < 18) continue;
@@ -113,6 +228,7 @@ export function createMatch(seed: number, opts: { river?: RiverKind } = {}): Set
   // the river: runs corner to corner between the villages. Each match picks a layout.
   // Every layout is symmetric under the map's 180-degree mirror, so both sides are equal.
   const C = N / 2;
+  if (!sea) {
   const kinds = Object.keys(RIVERS) as RiverKind[];
   // twin streams come up about 40% of the time; the other layouts share the rest
   const roll = rand();
@@ -161,6 +277,24 @@ export function createMatch(seed: number, opts: { river?: RiverKind } = {}): Set
       else if (Math.abs(r.s) > 44 && bank < 8 && rand() < 0.45) setF(x, y);
     }
   }
+  } else {
+    // pines along the coasts
+    for (let y = 0; y < N; y++) {
+      for (let x = 0; x < N; x++) {
+        const i = y * N + x;
+        if (!land![i] || w.bridge[i]) continue;
+        let coast = false;
+        for (let d = 0; d < 4 && !coast; d++) {
+          const qx = x + [1, -1, 0, 0][d] * 2;
+          const qy = y + [0, 0, 1, -1][d] * 2;
+          if (w.inBounds(qx, qy) && w.water[qy * N + qx]) coast = true;
+        }
+        if (coast && rand() < 0.2) setF(x, y);
+      }
+    }
+    // keep the sandbar landings clear
+    for (let y = 0; y < N; y++) for (let x = 0; x < N; x++) for (let dy = -2; dy <= 2; dy++) for (let dx = -2; dx <= 2; dx++) if (w.inBounds(x + dx, y + dy) && w.bridge[(y + dy) * N + x + dx] === 2) forest[y * N + x] = 0;
+  }
 
   // keep the villages clear
   for (let y = 0; y < N; y++) {
@@ -183,6 +317,10 @@ export function createMatch(seed: number, opts: { river?: RiverKind } = {}): Set
   }
 
   for (let i = 0; i < N * N; i++) if (w.water[i] || w.bridge[i]) forest[i] = 0;
+  if (land) {
+    // the sea map keeps its sandbar landings clear on both halves (mirroring can carry trees onto them)
+    for (let y = 0; y < N; y++) for (let x = 0; x < N; x++) for (let dy = -2; dy <= 2; dy++) for (let dx = -2; dx <= 2; dx++) if (w.inBounds(x + dx, y + dy) && w.bridge[(y + dy) * N + x + dx] === 2) forest[y * N + x] = 0;
+  }
 
   // villages
   const playerTC = spawnBuilding(w, 'townCenter', PLAYER, PLAYER_TC.tx, PLAYER_TC.ty, true);
@@ -226,9 +364,24 @@ export function createMatch(seed: number, opts: { river?: RiverKind } = {}): Set
   ];
   for (const [x, y] of stoneTiles) both((a, b) => spawnResource(w, 'stone', a, b), x, y);
 
+  if (sea) {
+    // riches on the islands: the back island has gold and stone, each islet gold,
+    // the central island gold and persimmons
+    const put = (kind: 'berries' | 'gold' | 'stone', x0: number, y0: number, wd: number, ht: number): void => {
+      for (let y = y0; y < y0 + ht; y++) for (let x = x0; x < x0 + wd; x++) both((a, b) => spawnResource(w, kind, a, b), x, y);
+    };
+    put('gold', 78, 11, 2, 2);
+    put('stone', 74, 16, 2, 2);
+    put('berries', 80, 16, 2, 2);
+    put('gold', 29, 51, 2, 2);
+    put('gold', 51, 29, 2, 2);
+    put('gold', 44, 45, 2, 2);
+    put('berries', 46, 50, 3, 1);
+  }
+
   // extra food, gold and stone further out, worth fighting over
   const patches: ('berries' | 'gold' | 'stone')[] = ['berries', 'berries', 'gold', 'gold', 'stone'];
-  for (const kind of patches) {
+  for (const kind of sea ? [] : patches) {
     for (let tries = 0; tries < 80; tries++) {
       const cx = Math.floor(8 + rand() * (N - 16));
       const cy = Math.floor(8 + rand() * (N - 16));
@@ -272,6 +425,21 @@ export function createMatch(seed: number, opts: { river?: RiverKind } = {}): Set
     for (const [id, e] of w.ents) if (e.dead) w.ents.delete(id);
   }
 
+  // on the sea map, cut walking routes through any trees that block the way from
+  // home to the enemy and to every island's riches (on both sides, so it stays fair)
+  if (sea) {
+    const home = { x: PLAYER_TC.tx + 3, y: PLAYER_TC.ty + 3 };
+    const goals: [number, number][] = [[ex - 1, ey - 1]];
+    for (const r of w.resources) if (r.type !== 'tree' && r.type !== 'sheep' && Math.hypot(r.tx - PLAYER_TC.tx, r.ty - PLAYER_TC.ty) > 20) goals.push([r.tx, r.ty]);
+    for (const [gx, gy] of goals) {
+      clearRoute(w, home.x, home.y, gx, gy);
+      const [mx, my] = mirror(w, gx, gy);
+      clearRoute(w, ex - 1, ey - 1, mx, my);
+    }
+    w.resources = w.resources.filter((r) => !r.dead);
+    for (const [id, e] of w.ents) if (e.dead) w.ents.delete(id);
+  }
+
   // starting villagers stand east of each Town Center
   for (let i = 0; i < ECONOMY.startingVillagers; i++) {
     const x = (PLAYER_TC.tx + 3.5) * T;
@@ -290,4 +458,34 @@ export function createMatch(seed: number, opts: { river?: RiverKind } = {}): Set
   for (const t of w.teams) t.popUsed = ECONOMY.startingVillagers + ECONOMY.startingScouts;
   w.teams[0].popCap = w.teams[1].popCap = 10;
   return { world: w, playerTC, enemyTC };
+}
+
+/**
+ * Finds a way from one tile to another treating trees as passable (water and
+ * everything else still blocks), then fells the trees on it, two tiles wide.
+ */
+function clearRoute(w: World, sx: number, sy: number, gx: number, gy: number): void {
+  const N = w.w;
+  const blocked = new Uint8Array(w.blocked);
+  for (const r of w.resources) if (r.type === 'tree' && !r.dead) blocked[r.ty * N + r.tx] = 0;
+  const near = (x: number, y: number): boolean => Math.abs(x - gx) <= 1 && Math.abs(y - gy) <= 1;
+  const p = findPath({ w: N, h: w.h, blocked }, sx, sy, near, gx, gy, 40000);
+  if (!p) return;
+  for (const t of p) {
+    for (const [dx, dy] of [
+      [0, 0],
+      [1, 0],
+      [0, 1],
+    ]) {
+      const x = t.x + dx;
+      const y = t.y + dy;
+      if (!w.inBounds(x, y)) continue;
+      const e = w.get(w.occ[y * N + x]);
+      if (e && e.kind === 'resource' && e.type === 'tree') {
+        e.dead = true;
+        w.occ[y * N + x] = 0;
+        w.blocked[y * N + x] = 0;
+      }
+    }
+  }
 }

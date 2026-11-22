@@ -6,7 +6,7 @@ import { AGES, BUILDINGS, MAP, MARKET, RESOURCES, OPENINGS, RENDER, SIM, TOWER_U
 import { buildingPos, buildTerrain, drawMinimap, drawWorld, Effects, type Camera, type Ghost } from './render/renderer';
 import { buildingSprite, iconFor } from './render/sprites';
 import { createBot, updateBot, type Bot } from './sim/bot';
-import { createMatch } from './sim/map';
+import { createMatch, type MapKind } from './sim/map';
 import {
   ENEMY,
   NATURE,
@@ -27,6 +27,7 @@ import {
   MAX_WALL,
   orderFormation,
   placeBuilding,
+  deleteOwn,
   placeWallLine,
   researchInfo,
   setGateLocked,
@@ -114,6 +115,7 @@ export interface GameOptions {
   difficulty: DifficultyKey;
   seed: number;
   attract?: boolean; // menu background: two AIs play, no fog, no input
+  map?: MapKind;
 }
 
 export class Game {
@@ -153,7 +155,7 @@ export class Game {
   ) {
     this.attract = !!opts.attract;
     this.difficulty = opts.difficulty;
-    const m = createMatch(opts.seed);
+    const m = createMatch(opts.seed, { map: opts.map ?? 'rivers' });
     this.world = m.world;
     this.bot = createBot(this.world, ENEMY, opts.difficulty);
     if (this.attract) this.playerBot = createBot(this.world, PLAYER, 'hard');
@@ -297,7 +299,7 @@ export class Game {
           const tx = Math.floor(ev.x / T);
           const ty = Math.floor(ev.y / T);
           if (ev.kind !== 'resource' && this.onScreen(ev.x, ev.y) && w.inBounds(tx, ty) && w.vis[PLAYER][ty * w.w + tx]) this.audio.play('death');
-          if (ev.kind === 'building' && ev.team === PLAYER) this.toast(`Your ${BUILDINGS[ev.type as BuildingType].name} was destroyed!`, true);
+          if (ev.kind === 'building' && ev.team === PLAYER && !ev.deleted) this.toast(`Your ${BUILDINGS[ev.type as BuildingType].name} was destroyed!`, true);
           break;
         }
         case 'built':
@@ -1042,6 +1044,21 @@ export class Game {
     this.audio.unlock();
     if (k === 'escape') return; // handled in main.ts (pause / resume / cancel)
     if (this.paused || this.over) return;
+    if (k === 'delete' || k === 'backspace') {
+      // Delete (on a Mac keyboard the key marked "delete" is Backspace) destroys what you have selected
+      e.preventDefault();
+      const mine = this.mySel();
+      if (!mine.length) return;
+      const r = deleteOwn(this.world, PLAYER, mine);
+      if (r === 'townCenter') {
+        this.audio.play('error');
+        this.toast('You cannot delete your Town Center.', true);
+      } else if (r === 'ok') {
+        this.audio.play('death');
+        this.select(this.selected.filter((x) => !x.dead), false);
+      }
+      return;
+    }
     if (k === 'm') {
       const muted = this.audio.toggleMute();
       this.toast(muted ? 'Sound off.' : 'Sound on.');

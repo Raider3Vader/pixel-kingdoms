@@ -10,6 +10,8 @@ import {
   World,
   orderAttack,
   buyResource,
+  canPlace,
+  deleteOwn,
   orderFormation,
   orderRepair,
   setGateLocked,
@@ -19,6 +21,7 @@ import {
   orderGather,
   orderMove,
   placeBuilding,
+  placeWallLine,
   queueOrder,
   spawnBuilding,
   spawnResource,
@@ -503,5 +506,86 @@ describe('one farmer per rice paddy', () => {
     const vs = [0, 1, 2].map((i) => spawnUnit(w, 'villager', PLAYER, (8 + i) * T, 9 * T));
     expect(smartOrder(w, vs, farms[0].x, farms[0].y, PLAYER, () => true)).toBe('gather');
     for (const f of farms) expect(farmersOf(w, f.id)).toBe(1);
+  });
+});
+
+describe('Inland Sea', () => {
+  it('is mirrored, mostly water, and every island connects by sandbar', () => {
+    for (const seed of [1, 2, 7]) {
+      const { world: w, playerTC, enemyTC } = createMatch(seed, { map: 'inlandSea' });
+      let water = 0;
+      for (let y = 0; y < w.h; y++)
+        for (let x = 0; x < w.w; x++) {
+          const i = y * w.w + x;
+          water += w.water[i];
+          const m = (w.h - 1 - y) * w.w + (w.w - 1 - x);
+          expect(w.water[i]).toBe(w.water[m]);
+          expect(w.bridge[i]).toBe(w.bridge[m]);
+        }
+      expect(water).toBeGreaterThan(w.w * w.h * 0.35);
+      const reach = (x: number, y: number): boolean => findPath(w, playerTC.tx + 3, playerTC.ty + 3, (a, b) => Math.abs(a - x) <= 1 && Math.abs(b - y) <= 1, x, y, 20000) !== null;
+      expect(reach(enemyTC.tx - 1, enemyTC.ty - 1)).toBe(true);
+      // every gold mine can be walked to from home
+      for (const g of w.resources.filter((r) => r.type === 'gold')) expect(reach(g.tx, g.ty)).toBe(true);
+    }
+  });
+
+  it('nothing but walls and gates can be built on a sandbar', () => {
+    const { world: w } = createMatch(1, { map: 'inlandSea' });
+    w.teams[PLAYER].wood = 1000;
+    const i = w.bridge.findIndex((b) => b === 2);
+    const tx = i % w.w;
+    const ty = Math.floor(i / w.w);
+    expect(canPlace(w, PLAYER, 'house', tx, ty, false)).toBe('blocked');
+    expect(canPlace(w, PLAYER, 'wall', tx, ty, false)).toBe('ok');
+  });
+
+  it('Hard beats Easy across the sea', () => {
+    const { world: w } = createMatch(11, { map: 'inlandSea' });
+    const hard = createBot(w, PLAYER, 'hard', 'boom');
+    const easy = createBot(w, ENEMY, 'easy', 'boom');
+    run(w, 45 * 60, () => {
+      updateBot(w, hard, DT);
+      updateBot(w, easy, DT);
+    });
+    expect(w.winner).toBe(PLAYER);
+  }, 120_000);
+});
+
+describe('delete and gates on walls', () => {
+  it('Delete destroys your own units and buildings, refunds unfinished ones, but keeps your last Town Center', () => {
+    const w = testWorld();
+    const tc = w.buildings.find((b) => b.team === PLAYER && b.type === 'townCenter')!;
+    const s = spawnUnit(w, 'swordsman', PLAYER, 20 * T, 20 * T);
+    const foe = spawnUnit(w, 'swordsman', ENEMY, 22 * T, 20 * T);
+    w.teams[PLAYER].wood = 100;
+    expect(placeBuilding(w, PLAYER, 'house', 20, 24, [], false)).toBe('ok');
+    const house = w.buildings.find((b) => b.type === 'house')!;
+    expect(w.teams[PLAYER].wood).toBeLessThan(100);
+    expect(deleteOwn(w, PLAYER, [s, foe, house, tc])).toBe('ok');
+    expect(s.dead).toBe(true);
+    expect(house.dead).toBe(true);
+    expect(foe.dead).toBe(false); // not yours
+    expect(tc.dead).toBe(false); // your only Town Center stays
+    expect(w.teams[PLAYER].wood).toBe(100); // a bare foundation gives all its wood back
+    expect(deleteOwn(w, PLAYER, [tc])).toBe('townCenter');
+  });
+
+  it('a gate placed on a wall piece replaces it', () => {
+    const w = testWorld();
+    w.teams[PLAYER].wood = 500;
+    expect(placeWallLine(w, PLAYER, 'wall', 20, 20, 26, 20, [], false)).toBe(7);
+    const mid = w.buildings.find((b) => b.type === 'wall' && b.tx === 23)!;
+    mid.progress = 1; // a finished piece works too
+    expect(canPlace(w, PLAYER, 'gate', 23, 20, false)).toBe('ok');
+    expect(canPlace(w, PLAYER, 'house', 23, 20, false)).toBe('blocked');
+    expect(placeBuilding(w, PLAYER, 'gate', 23, 20, [], false)).toBe('ok');
+    expect(mid.dead).toBe(true);
+    expect(w.buildings.filter((b) => !b.dead && b.tx === 23 && b.ty === 20).map((b) => b.type)).toEqual(['gate']);
+    expect(w.buildings.filter((b) => !b.dead && b.type === 'wall').length).toBe(6);
+    // and on an unfinished piece, its wood comes back
+    const before = w.teams[PLAYER].wood;
+    expect(placeBuilding(w, PLAYER, 'gate', 21, 20, [], false)).toBe('ok');
+    expect(w.teams[PLAYER].wood).toBe(before + BUILDINGS.wall.cost.wood! - BUILDINGS.gate.cost.wood!);
   });
 });

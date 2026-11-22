@@ -9,6 +9,20 @@ export interface ChangelogEntry {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    version: '0.9.0',
+    date: '2026-11-22',
+    title: 'Inland Sea',
+    items: [
+      'New map: the Inland Sea. Choose Rivers or Inland Sea on the menu. Each side has a large home island and a private back island with gold and stone. Two islets and a central island, rich in gold, sit in the sea between you.',
+      'Shallow sandbars join the islands and can be walked across. They are the choke points of the map. Boats are coming next.',
+      'Open sea is drawn a shade darker than the water near the shore.',
+      'Press Delete (the delete key on a Mac) to destroy the units or buildings you have selected. Unfinished buildings give back what was not built yet. Your Town Center cannot be deleted.',
+      'Place a gate on one of your wall pieces, finished or still a foundation, to swap it in.',
+      'Only walls and gates can be built on bridges, fords and sandbars now, so nobody can block a crossing by accident.',
+      'Fixed: the rice paddy placement preview showed a house. It now shows the field.',
+    ],
+  },
+  {
     version: '0.8.2',
     date: '2026-11-22',
     title: 'Villager counts',

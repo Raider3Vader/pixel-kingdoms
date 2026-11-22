@@ -6,6 +6,7 @@ import { Game } from './game';
 import { CHANGELOG, VERSION } from './changelog';
 import { TitleScene } from './title';
 import { setTheme } from './render/sprites';
+import { MAPS, type MapKind } from './sim/map';
 import { drawGraph, fmtClock, summaryRows, type GraphKey, type MatchResults } from './stats';
 
 const $ = <E extends HTMLElement>(id: string): E => document.getElementById(id) as E;
@@ -18,6 +19,14 @@ ctx.imageSmoothingEnabled = false;
 
 const audio = new Audio();
 const DIFF_KEY = 'pk-difficulty';
+const MAP_KEY = 'pk-map';
+let mapKind: MapKind = 'rivers';
+try {
+  const m = localStorage.getItem(MAP_KEY) as MapKind | null;
+  if (m && m in MAPS) mapKind = m;
+} catch {
+  /* ignore */
+}
 let difficulty: DifficultyKey = 'normal';
 try {
   const d = localStorage.getItem(DIFF_KEY) as DifficultyKey | null;
@@ -60,7 +69,7 @@ function fit(): void {
 window.addEventListener('resize', fit);
 fit();
 
-let game: Game = new Game(canvas, audio, { difficulty: 'hard', seed: Math.floor(Math.random() * 1e9), attract: true });
+let game: Game = new Game(canvas, audio, { difficulty: 'hard', map: mapKind, seed: Math.floor(Math.random() * 1e9), attract: true });
 let screen: 'title' | 'menu' | 'playing' | 'paused' | 'over' = 'title';
 const title = new TitleScene();
 
@@ -77,6 +86,8 @@ const DIFF_HINTS: Record<DifficultyKey, string> = {
 function renderMenu(): void {
   for (const b of Array.from($('diff').querySelectorAll('button'))) b.classList.toggle('on', b.dataset.d === difficulty);
   $('diff-hint').textContent = DIFF_HINTS[difficulty];
+  for (const b of Array.from($('map-choice').querySelectorAll('button'))) b.classList.toggle('on', b.dataset.m === mapKind);
+  $('map-hint').textContent = MAPS[mapKind].hint;
   $('mute-btn').textContent = audio.muted ? 'Sound: off' : 'Sound: on';
   $('music-btn').textContent = audio.musicOn ? 'Music: on' : 'Music: off';
   $('music-btn2').textContent = audio.musicOn ? 'Music: on' : 'Music: off';
@@ -86,7 +97,7 @@ function startGame(): void {
   audio.unlock();
   audio.play('click');
   game.destroy();
-  game = new Game(canvas, audio, { difficulty, seed: Math.floor(Math.random() * 1e9) });
+  game = new Game(canvas, audio, { difficulty, map: mapKind, seed: Math.floor(Math.random() * 1e9) });
   game.onPauseRequest = () => pause();
   game.onGameOver = (won) => setTimeout(() => gameOver(won), 1200);
   audio.setMood('calm');
@@ -97,7 +108,7 @@ function startGame(): void {
 
 function toMenu(): void {
   game.destroy();
-  game = new Game(canvas, audio, { difficulty: 'hard', seed: Math.floor(Math.random() * 1e9), attract: true });
+  game = new Game(canvas, audio, { difficulty: 'hard', map: mapKind, seed: Math.floor(Math.random() * 1e9), attract: true });
   screen = 'menu';
   audio.setMood('calm');
   $('hud').classList.add('hidden');
@@ -176,6 +187,22 @@ $('diff').addEventListener('click', (e) => {
   } catch {
     /* ignore */
   }
+  audio.unlock();
+  audio.play('click');
+  renderMenu();
+});
+$('map-choice').addEventListener('click', (e) => {
+  const b = (e.target as HTMLElement).closest('button');
+  if (!b?.dataset.m) return;
+  mapKind = b.dataset.m as MapKind;
+  try {
+    localStorage.setItem(MAP_KEY, mapKind);
+  } catch {
+    /* ignore */
+  }
+  // the menu's background game shows the chosen map
+  game.destroy();
+  game = new Game(canvas, audio, { difficulty: 'hard', map: mapKind, seed: Math.floor(Math.random() * 1e9), attract: true });
   audio.unlock();
   audio.play('click');
   renderMenu();
@@ -302,7 +329,7 @@ function frame(now: number): void {
   game.update(dt);
   if (screen === 'menu' && game.world.winner !== null) {
     game.destroy();
-    game = new Game(canvas, audio, { difficulty: 'hard', seed: Math.floor(Math.random() * 1e9), attract: true });
+    game = new Game(canvas, audio, { difficulty: 'hard', map: mapKind, seed: Math.floor(Math.random() * 1e9), attract: true });
   }
   game.render(ctx);
   requestAnimationFrame(frame);

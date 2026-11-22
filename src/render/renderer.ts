@@ -147,7 +147,10 @@ export function buildTerrain(w: World): HTMLCanvasElement {
     for (let tx = 0; tx < w.w; tx++) {
       const i = ty * w.w + tx;
       if (w.water[i]) {
-        px(tx * T, ty * T, T, T, deep);
+        // open sea (no land within 3 tiles) is a shade darker than water near the shore
+        let open = true;
+        for (let dy = -3; dy <= 3 && open; dy++) for (let dx = -3; dx <= 3; dx++) if (w.inBounds(tx + dx, ty + dy) && !isW(tx + dx, ty + dy)) { open = false; break; }
+        px(tx * T, ty * T, T, T, open ? '#285f88' : deep);
         for (let k = 0; k < 4; k++) {
           const a = hash(tx * 3 + k, ty * 5 - k);
           px(tx * T + Math.floor(a * 12), ty * T + Math.floor(hash(tx - k, ty + k * 3) * 15), 3 + Math.floor(a * 3), 1, k % 2 ? shallow : '#8fc4e0');
@@ -418,8 +421,13 @@ export function drawWorld(ctx: CanvasRenderingContext2D, w: World, terrain: HTML
   for (const g of o.ghosts) {
     const s = BUILDINGS[g.type].size;
     ctx.globalAlpha = 0.6;
-    const gs = buildingSprite(g.type, PLAYER);
-    ctx.drawImage(gs, g.tx * T + Math.floor((s * T - gs.width) / 2), (g.ty + s) * T - gs.height + buildingPad());
+    if (g.type === 'farm') {
+      // rice paddies lie flat on the ground: preview the field itself
+      ctx.drawImage(farmSprite(4, PLAYER), g.tx * T, g.ty * T);
+    } else {
+      const gs = buildingSprite(g.type, PLAYER);
+      ctx.drawImage(gs, g.tx * T + Math.floor((s * T - gs.width) / 2), (g.ty + s) * T - gs.height + buildingPad());
+    }
     ctx.globalAlpha = 0.35;
     ctx.fillStyle = g.ok ? PAL.lime : PAL.red;
     ctx.fillRect(g.tx * T, g.ty * T, s * T, s * T);

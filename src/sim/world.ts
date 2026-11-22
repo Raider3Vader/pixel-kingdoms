@@ -127,7 +127,7 @@ export interface TeamState {
 }
 
 export type SimEvent =
-  | { t: 'death'; x: number; y: number; team: number; type: string; kind: Kind }
+  | { t: 'death'; x: number; y: number; team: number; type: string; kind: Kind; deleted?: boolean }
   | { t: 'hit'; x: number; y: number; team: number; ranged: boolean; fx: number; fy: number }
   | { t: 'built'; id: number; team: number; type: string; x: number; y: number }
   | { t: 'trained'; id: number; team: number; type: string; x: number; y: number }
@@ -452,7 +452,8 @@ export function canPlace(w: World, team: number, type: BuildingType, tx: number,
   for (let y = ty; y < ty + s.size; y++) {
     for (let x = tx; x < tx + s.size; x++) {
       if (x < 1 || y < 1 || x >= w.w - 1 || y >= w.h - 1) return 'blocked';
-      if (w.blocked[y * w.w + x] || w.occ[y * w.w + x]) return 'blocked';
+      if ((w.blocked[y * w.w + x] || w.occ[y * w.w + x]) && !(s.gate && wallUnder(w, team, x, y))) return 'blocked';
+      if (w.bridge[y * w.w + x] && !s.wall) return 'blocked'; // keep bridges and fords open; only walls and gates may close them
       if (requireExplored && team < 2 && !w.explored[team][y * w.w + x]) return 'unexplored';
     }
   }
@@ -478,6 +479,12 @@ export function setGateLocked(w: World, b: Entity, locked: boolean): void {
 export function placeBuilding(w: World, team: number, type: BuildingType, tx: number, ty: number, builders: Entity[], requireExplored = true): PlaceResult {
   const r = canPlace(w, team, type, tx, ty, requireExplored);
   if (r !== 'ok') return r;
+  // a gate placed on a wall piece takes its place (refunding whatever of the piece was not built yet)
+  const old = BUILDINGS[type].gate ? wallUnder(w, team, tx, ty) : null;
+  if (old) {
+    refundUnbuilt(w, old);
+    removeQuietly(w, old);
+  }
   pay(w, team, BUILDINGS[type].cost);
   const b = spawnBuilding(w, type, team, tx, ty, false);
   w.emit({ t: 'placed', team, x: b.x, y: b.y });
@@ -516,6 +523,60 @@ export function lineTiles(x0: number, y0: number, x1: number, y1: number): Pt[] 
 }
 
 export const MAX_WALL = 24;
+
+/** The team's own wall piece (not a gate) on this tile, if any. */
+export function wallUnder(w: World, team: number, tx: number, ty: number): Entity | null {
+  if (!w.inBounds(tx, ty)) return null;
+  const e = w.get(w.occ[ty * w.w + tx]);
+  if (!e || e.dead || e.kind !== 'building' || e.team !== team) return null;
+  const s = BUILDINGS[e.type as BuildingType];
+  return s.wall && !s.gate ? e : null;
+}
+
+/** Gives back the part of a building's price that was not built yet (all of it for a bare foundation). */
+function refundUnbuilt(w: World, b: Entity): void {
+  if (b.progress >= 1 || b.team > 1) return;
+  const cost = BUILDINGS[b.type as BuildingType].cost;
+  const back: Cost = {};
+  for (const k of RES_KINDS) if (cost[k]) back[k] = Math.floor((cost[k] ?? 0) * (1 - b.progress));
+  refund(w, b.team, back);
+}
+
+/** Takes a building off the map without a death (no sound, no rubble, no stats). */
+function removeQuietly(w: World, b: Entity): void {
+  b.dead = true;
+  for (let y = b.ty; y < b.ty + b.size; y++) {
+    for (let x = b.tx; x < b.tx + b.size; x++) {
+      const i = y * w.w + x;
+      if (w.occ[i] === b.id) {
+        w.occ[i] = 0;
+        w.blocked[i] = 0;
+      }
+    }
+  }
+}
+
+export type DeleteResult = 'ok' | 'townCenter' | 'none';
+
+/**
+ * The Delete key: destroys the team's own selected units and buildings. Unfinished
+ * buildings give back what was not built yet. Your last Town Center cannot be deleted.
+ */
+export function deleteOwn(w: World, team: number, ents: Entity[]): DeleteResult {
+  let n = 0;
+  let keptTC = false;
+  for (const e of ents) {
+    if (e.dead || e.team !== team || e.kind === 'resource') continue;
+    if (e.type === 'townCenter' && !w.buildings.some((b) => b !== e && !b.dead && b.team === team && b.type === 'townCenter')) {
+      keptTC = true;
+      continue;
+    }
+    if (e.kind === 'building') refundUnbuilt(w, e);
+    kill(w, e, true);
+    n++;
+  }
+  return n > 0 ? 'ok' : keptTC ? 'townCenter' : 'none';
+}
 
 /** Places a wall from one tile to another. Returns how many pieces went down. */
 export function placeWallLine(w: World, team: number, type: BuildingType, x0: number, y0: number, x1: number, y1: number, builders: Entity[], requireExplored = true): number {
@@ -1055,11 +1116,11 @@ function damage(w: World, attacker: Entity, target: Entity, amount: number): voi
   }
 }
 
-export function kill(w: World, e: Entity): void {
+export function kill(w: World, e: Entity, deleted = false): void {
   if (e.dead) return;
   e.dead = true;
   e.hp = 0;
-  w.emit({ t: 'death', x: e.x, y: e.y, team: e.team, type: e.type, kind: e.kind });
+  w.emit({ t: 'death', x: e.x, y: e.y, team: e.team, type: e.type, kind: e.kind, deleted });
   if (e.kind === 'unit' && e.team < 2) w.teams[e.team].stats.lost++;
   if (e.kind === 'building') ungarrison(w, e);
   if (e.kind !== 'unit') {

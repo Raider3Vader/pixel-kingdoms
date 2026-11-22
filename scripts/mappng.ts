@@ -1,10 +1,15 @@
-// Renders map overviews to a PNG: npx tsx scripts/mappng.ts out.png seed1 seed2 ...
+// Renders map overviews to a PNG: npx tsx scripts/mappng.ts out.png seed1 seed2:twin seed3:sea ...
 import { writeFileSync } from 'node:fs';
 import { deflateSync } from 'node:zlib';
 import { createMatch } from '../src/sim/map';
 const [out, ...seeds] = process.argv.slice(2);
 const S = 5;
-const maps = seeds.map((s) => (s.includes(':') ? createMatch(Number(s.split(':')[0]), { river: s.split(':')[1] as never }) : createMatch(Number(s))).world);
+// seed, seed:riverKind, or seed:sea for the Inland Sea
+const maps = seeds.map((s) => {
+  const [seed, kind] = s.split(':');
+  if (kind === 'sea') return createMatch(Number(seed), { map: 'inlandSea' }).world;
+  return (kind ? createMatch(Number(seed), { river: kind as never }) : createMatch(Number(seed))).world;
+});
 const N = maps[0].w;
 const W = maps.length * N * S + (maps.length - 1) * 12;
 const H = N * S;
