@@ -1,6 +1,6 @@
 # Pixel Kingdoms: handoff
 
-Read this first in a new chat. Last updated 2026-11-22, version **0.8.0**.
+Read this first in a new chat. Last updated 2026-11-22, version **0.8.1**.
 
 ## 1. Where everything is
 
@@ -24,7 +24,7 @@ Read this first in a new chat. Last updated 2026-11-22, version **0.8.0**.
 - **Keep Classic hidden.** Its art is still in `src/render/sprites.ts`, but `setTheme` always forces `sakura`, and the Theme menu option was removed on request.
 - Test UI changes in the browser at a desktop size and at a small or zoomed-in size (about 600 x 336). The owner's browser is zoomed to about 165%.
 
-## 3. What the game has (0.8.0)
+## 3. What the game has (0.8.1)
 
 - **Screens:** a title screen (a villager chased by a rider), a menu (difficulty, Controls, Open changelog, Sound, Music, Full screen), pause and an end screen with a stats table and graphs (army, villagers, resources over time; `src/stats.ts`, data from `World.history`, a snapshot every 10 s).
 - **Music:** made live in `src/audio.ts` (`Music`, `TRACKS`): a calm loop (D yo scale, koto, drone, flute) and a battle loop (E in scale, taiko). `Game.updateMood()` switches to battle after `MUSIC_MOOD` hits nearby and back to calm after a quiet spell. The game fills the whole window at a whole-number pixel scale.
@@ -32,6 +32,7 @@ Read this first in a new chat. Last updated 2026-11-22, version **0.8.0**.
 - **Economy:** food, wood, gold and stone.
   - Persimmon trees and sheep are the starting food.
   - **Rice paddies** (60 wood) give renewable food: 300 per field, auto-replant for 40 wood, which is on by default; Z toggles it.
+  - One farmer per paddy: shift-placing paddies gives each its own villager (`Game.paddyBuilder`), and `finishBuildOrder` / right-click spread extra villagers to other paddies (`farmTaken`, `freeFarm`).
   - Storehouses are drop-offs for everything.
   - The **Market** (Feudal) buys 100 food or wood for 60 gold and 100 stone for 80. It earns trade gold, and merchants add more.
 - **Ages:** Dark → Feudal (350 food, 150 wood, 60 s) → Imperial (600 food, 300 wood, 200 gold, 90 s), advanced at the Town Center. Every soldier upgrades on the spot when you advance.
@@ -79,7 +80,7 @@ Read this first in a new chat. Last updated 2026-11-22, version **0.8.0**.
 
 ## 5. Tools and tests
 
-- `npm test` runs 48 tests: economy, every combat matchup, ages, the market, gates, towers, repair, paddies, formations, queued orders, every river layout (mirrored and connected), and AI games including Hard beating Easy.
+- `npm test` runs 50 tests: economy, every combat matchup, ages, the market, gates, towers, repair, paddies, formations, queued orders, every river layout (mirrored and connected), and AI games including Hard beating Easy.
 - `npm run balance` plays every opening against every other (32 games, takes several minutes). The last run was fairly even, with games of about 11 to 22 minutes.
 - `npx tsx scripts/mappng.ts out.png 5 5:twin` renders map overviews (`seed` or `seed:riverKind`). `scripts/showmap.ts` prints a map as text. `scripts/simulate.ts` traces one AI.
 - In the browser console, `pk()` returns the live Game. The built-in browser pane runs at about 1.5 fps when hidden, so drive time with `pk().update(1/60)` loops.

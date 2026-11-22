@@ -14,6 +14,7 @@ import {
   orderRepair,
   setGateLocked,
   setOrder,
+  smartOrder,
   startResearch,
   orderGather,
   orderMove,
@@ -475,5 +476,32 @@ describe('match stats', () => {
     expect(s.built).toBeGreaterThan(3);
     expect(s.agedAt.length).toBe(w.teams[ENEMY].age);
     expect(s.peakArmy).toBeGreaterThanOrEqual(Math.max(...w.history.map((p) => p.army[1])));
+  });
+});
+
+describe('one farmer per rice paddy', () => {
+  const farmersOf = (w: World, id: number): number => w.units.filter((u) => u.order.type === 'gather' && u.order.target === id).length;
+
+  it('villagers that finish a paddy together spread out to build and work the others', () => {
+    const w = testWorld();
+    w.teams[PLAYER].wood = 1000;
+    const vs = [0, 1, 2].map((i) => spawnUnit(w, 'villager', PLAYER, (8 + i) * T, 9 * T));
+    // all three sent to every paddy in turn: they end up on the last one
+    for (const tx of [8, 11, 14]) expect(placeBuilding(w, PLAYER, 'farm', tx, 12, vs, false)).toBe('ok');
+    run(w, 90);
+    const farms = w.buildings.filter((b) => b.type === 'farm');
+    expect(farms.length).toBe(3);
+    for (const f of farms) {
+      expect(f.progress).toBe(1);
+      expect(farmersOf(w, f.id)).toBe(1);
+    }
+  });
+
+  it('right-clicking one paddy with several villagers sends one there and the rest to free paddies', () => {
+    const w = testWorld();
+    const farms = [8, 11, 14].map((tx) => spawnBuilding(w, 'farm', PLAYER, tx, 12, true));
+    const vs = [0, 1, 2].map((i) => spawnUnit(w, 'villager', PLAYER, (8 + i) * T, 9 * T));
+    expect(smartOrder(w, vs, farms[0].x, farms[0].y, PLAYER, () => true)).toBe('gather');
+    for (const f of farms) expect(farmersOf(w, f.id)).toBe(1);
   });
 });

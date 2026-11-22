@@ -904,7 +904,8 @@ export class Game {
     if (this.mode.kind !== 'place') return;
     const g = this.ghost();
     if (!g) return;
-    const builders = this.mySel().filter((u) => u.type === 'villager');
+    let builders = this.mySel().filter((u) => u.type === 'villager');
+    if (g.type === 'farm' && keep && builders.length > 1) builders = this.paddyBuilder(builders, g.tx, g.ty);
     const r = placeBuilding(this.world, PLAYER, g.type, g.tx, g.ty, builders);
     if (r === 'ok') {
       if (!keep || !canAfford(this.world, PLAYER, BUILDINGS[g.type].cost)) this.mode = { kind: 'none' };
@@ -913,6 +914,26 @@ export class Game {
       const c = BUILDINGS[g.type].cost;
       this.toast(r === 'cost' ? `Not enough ${shortOf(this.world, PLAYER, c)} (${costText(c)}).` : r === 'unexplored' ? 'You cannot build in unexplored land.' : r === 'age' ? 'Not available in this age.' : 'Cannot build there.');
     }
+  }
+
+  /**
+   * Shift-placing several rice paddies: each one gets its own villager (the
+   * nearest one not already building a paddy), so every paddy ends up with one
+   * farmer. Paddies beyond the number of villagers wait for a free villager.
+   */
+  private paddyBuilder(vills: Entity[], tx: number, ty: number): Entity[] {
+    const w = this.world;
+    const onPaddy = (u: Entity): boolean => {
+      if (u.order.type !== 'build') return false;
+      const b = w.get(u.order.target);
+      return !!b && b.type === 'farm' && b.progress < 1;
+    };
+    const free = vills.filter((u) => !onPaddy(u));
+    if (!free.length) return [];
+    const cx = (tx + 1) * T;
+    const cy = (ty + 1) * T;
+    free.sort((a, b) => Math.hypot(a.x - cx, a.y - cy) - Math.hypot(b.x - cx, b.y - cy));
+    return [free[0]];
   }
 
   /** Walls: first click sets the start, second click builds the line. */

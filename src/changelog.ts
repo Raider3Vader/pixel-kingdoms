@@ -9,6 +9,16 @@ export interface ChangelogEntry {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    version: '0.8.1',
+    date: '2026-11-22',
+    title: 'One farmer per paddy',
+    items: [
+      'Shift-clicking several rice paddies with several villagers selected now gives each paddy its own villager, who builds it and then farms it (replanting as usual). If you place more paddies than you have villagers, the extra ones wait for a free villager.',
+      'Villagers who finish a paddy together no longer crowd onto it: one farms it and the others build or farm other paddies close by.',
+      'Right-clicking a paddy with several villagers sends one there and the rest to free paddies nearby.',
+    ],
+  },
+  {
     version: '0.8.0',
     date: '2026-11-22',
     title: 'Music and match stats',

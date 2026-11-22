@@ -360,6 +360,11 @@ export function nearestDropoff(w: World, team: number, x: number, y: number): En
   return best;
 }
 
+/** True if some other villager already works (or is heading to work) this rice paddy. */
+export function farmTaken(w: World, farm: Entity, except?: Entity): boolean {
+  return w.units.some((v) => v !== except && !v.dead && v.order.type === 'gather' && v.order.target === farm.id);
+}
+
 /** The nearest finished rice paddy of a team that nobody is working. */
 export function freeFarm(w: World, team: number, x: number, y: number, maxDist = Infinity): Entity | null {
   let best: Entity | null = null;
@@ -760,7 +765,15 @@ export function smartOrder(w: World, units: Entity[], x: number, y: number, team
         return 'build';
       }
       if (target.type === 'farm' && vills.length) {
-        for (const v of vills) setOrder(v, { type: 'gather', target: target.id, resType: 'farm', phase: 'go', dropId: 0 });
+        const rest = [...vills];
+        // the closest villager takes the clicked paddy; the others spread out over free paddies nearby
+        rest.sort((a, b) => Math.hypot(a.x - target.x, a.y - target.y) - Math.hypot(b.x - target.x, b.y - target.y));
+        const farmIt = (v: Entity, f: Entity): void => setOrder(v, { type: 'gather', target: f.id, resType: 'farm', phase: 'go', dropId: 0 });
+        farmIt(rest.shift()!, target);
+        for (const v of rest) {
+          const free = freeFarm(w, team, target.x, target.y, 8 * T);
+          farmIt(v, free ?? target);
+        }
         return 'gather';
       }
       const soldiersHere = mine.filter((u) => u.type !== 'villager');
@@ -1264,8 +1277,21 @@ function finishBuildOrder(w: World, u: Entity, o: Extract<Order, { type: 'build'
     return;
   }
   if (b && b.type === 'farm' && b.progress >= 1) {
-    setOrder(u, { type: 'gather', target: b.id, resType: 'farm', phase: 'go', dropId: 0 });
-    return;
+    // one farmer per paddy: if someone already works this one, help elsewhere
+    if (!farmTaken(w, b, u)) {
+      setOrder(u, { type: 'gather', target: b.id, resType: 'farm', phase: 'go', dropId: 0 });
+      return;
+    }
+    const unbuilt = w.buildings.find((x) => !x.dead && x.team === u.team && x.type === 'farm' && x.progress < 1 && Math.hypot(x.x - u.x, x.y - u.y) < 8 * T && !w.units.some((v) => v !== u && !v.dead && v.order.type === 'build' && v.order.target === x.id));
+    if (unbuilt) {
+      setOrder(u, { type: 'build', target: unbuilt.id, after: o.after });
+      return;
+    }
+    const free = freeFarm(w, u.team, u.x, u.y, 8 * T);
+    if (free) {
+      setOrder(u, { type: 'gather', target: free.id, resType: 'farm', phase: 'go', dropId: 0 });
+      return;
+    }
   }
   // help with another unfinished building close by
   const other = w.buildings.find((x) => !x.dead && x.team === u.team && x.progress < 1 && Math.hypot(x.x - u.x, x.y - u.y) < 5 * T);
