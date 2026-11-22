@@ -36,6 +36,7 @@ import {
   step,
   teamUnits,
   train,
+  type Entity,
 } from './world';
 
 const DT = 1 / SIM.tickHz;
@@ -729,4 +730,27 @@ describe('transport boats', () => {
     for (const u of aboard) expect(u.dead).toBe(true);
     expect(troops.filter((u) => !u.dead).length).toBe(2);
   });
+});
+
+describe('AI sea landings', () => {
+  it('a Hard AI on the Inland Sea ships troops across in a transport and lands them on the enemy shore', () => {
+    const { world: w, enemyTC } = createMatch(11, { map: 'inlandSea' });
+    const a = createBot(w, PLAYER, 'hard', 'boom');
+    const b = createBot(w, ENEMY, 'hard', 'archers');
+    let landed: Entity[] = [];
+    let riders: number[] = [];
+    run(w, 25 * 60, () => {
+      updateBot(w, a, DT);
+      updateBot(w, b, DT);
+      if (a.landing) riders = a.landing.riders;
+      else if (riders.length && a.landingsSent > 0 && !landed.length) landed = riders.map((id) => w.get(id)).filter((u): u is Entity => !!u);
+    });
+    expect(a.landingsSent).toBeGreaterThan(0);
+    expect(landed.length).toBeGreaterThan(0);
+    // they came ashore on the enemy's island, not back home
+    const near = landed.filter((u) => Math.hypot(u.x / T - enemyTC.tx, u.y / T - enemyTC.ty) < 45);
+    expect(near.length).toBeGreaterThan(0);
+    // nobody is left stuck inside a boat that no longer exists
+    for (const u of w.units) if (u.inside) expect(w.get(u.inside)).toBeDefined();
+  }, 120_000);
 });

@@ -9,6 +9,15 @@ export interface ChangelogEntry {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    version: '0.10.2',
+    date: '2026-11-22',
+    title: 'Enemy sea landings',
+    items: [
+      'On the Inland Sea, the Normal and Hard enemy builds a transport boat once it has war boats.',
+      'Every other attack, up to 8 of its soldiers board the transport. It sails round to your shore nearest your Town Center, and they storm ashore there instead of coming over the sandbars. Watch your coasts, and sink the transport before it lands.',
+    ],
+  },
+  {
     version: '0.10.1',
     date: '2026-11-22',
     title: 'Transport boats',

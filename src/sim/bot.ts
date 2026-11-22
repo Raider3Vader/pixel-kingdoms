@@ -29,6 +29,11 @@ import {
   freeFarm,
   isNaval,
   isSoldier,
+  garrisoned,
+  landingSpot,
+  orderBoard,
+  orderUnload,
+  landPassengers,
   nearestDropoff,
   nearestResource,
   orderMove,
@@ -56,6 +61,17 @@ export interface Bot {
   saving: boolean; // saving up to advance an age
   savingSince: number;
   reserve: Cost; // set aside for a Pagoda or a war boat: troops are not trained out of it
+  landing: Landing | null; // a sea landing under way
+  landingsSent: number;
+}
+
+/** A landing party: soldiers board a transport, it sails to the enemy's shore, and they storm ashore. */
+interface Landing {
+  boat: number;
+  riders: number[];
+  target: number; // the enemy building they are going for
+  phase: 'boarding' | 'sailing';
+  since: number;
 }
 
 export function createBot(w: World, team: number, diffKey: DifficultyKey, openingKey?: OpeningKey): Bot {
@@ -77,6 +93,8 @@ export function createBot(w: World, team: number, diffKey: DifficultyKey, openin
     saving: false,
     savingSince: -1,
     reserve: {},
+    landing: null,
+    landingsSent: 0,
   };
 }
 
@@ -329,7 +347,7 @@ function playerTargets(w: World, bot: Bot): Entity[] {
 }
 
 function attack(w: World, bot: Bot, tc: Entity): void {
-  const army = w.units.filter((u) => !u.dead && u.team === bot.team && isSoldier(u) && !isNaval(u) && u.type !== 'scout' && !bot.defending.has(u.id));
+  const army = w.units.filter((u) => !u.dead && u.team === bot.team && isSoldier(u) && !isNaval(u) && !u.inside && !isRider(bot, u) && u.type !== 'scout' && !bot.defending.has(u.id));
   const idle = army.filter((u) => u.order.type === 'idle');
   if (idle.length < bot.attackSize || w.time < bot.diff.firstAttackSec) return;
   const targets = playerTargets(w, bot);
@@ -364,7 +382,7 @@ function defend(w: World, bot: Bot, tc: Entity): void {
   const cx = threats.reduce((a, u) => a + u.x, 0) / threats.length;
   const cy = threats.reduce((a, u) => a + u.y, 0) / threats.length;
   // soldiers nearby come home to fight
-  const soldiers = w.units.filter((u) => !u.dead && u.team === bot.team && isSoldier(u) && !isNaval(u) && Math.hypot(u.x - tc.x, u.y - tc.y) < 25 * T);
+  const soldiers = w.units.filter((u) => !u.dead && u.team === bot.team && isSoldier(u) && !isNaval(u) && !u.inside && !isRider(bot, u) && Math.hypot(u.x - tc.x, u.y - tc.y) < 25 * T);
   const free = soldiers.filter((u) => u.order.type !== 'attack');
   if (free.length) {
     orderMove(w, free, cx, cy, true);
@@ -402,7 +420,9 @@ function naval(w: World, bot: Bot, tc: Entity): void {
   const wantWar = team.age >= 1 ? Math.max(2, Math.round(4 * bot.diff.armyScale)) : 0;
   if (dock && dock.queue.length === 0 && !bot.saving) {
     if (boats.length < wantFish) train(w, dock, 'fishingBoat');
-    else if (wars.length < wantWar && train(w, dock, 'warBoat') === 'cost') bot.reserve = UNITS.warBoat.cost;
+    else if (team.age >= 1 && wars.length >= 1 && teamUnits(w, bot.team, 'transportBoat').length === 0 && bot.diffKey !== 'easy') {
+      if (train(w, dock, 'transportBoat') === 'cost') bot.reserve = UNITS.transportBoat.cost;
+    } else if (wars.length < wantWar && train(w, dock, 'warBoat') === 'cost') bot.reserve = UNITS.warBoat.cost;
   }
   // idle fishing boats go back to the nearest shoal
   for (const b of boats) {
@@ -420,6 +440,76 @@ function naval(w: World, bot: Bot, tc: Entity): void {
   }
 }
 
+/** An enemy building near its shore, as deep in its land (close to its Town Center) as possible. */
+function landingTarget(w: World, bot: Bot): Entity | null {
+  const enemyTc = w.buildings.find((b) => !b.dead && b.team !== bot.team && b.team < 2 && b.type === 'townCenter');
+  if (!enemyTc) return null;
+  const coastal = w.buildings.filter((b) => !b.dead && b.team !== bot.team && b.team < 2 && landingSpot(w, b.x, b.y, 7));
+  coastal.sort((a, b) => Math.hypot(a.x - enemyTc.x, a.y - enemyTc.y) - Math.hypot(b.x - enemyTc.x, b.y - enemyTc.y));
+  return coastal[0] ?? null;
+}
+
+const isRider = (bot: Bot, u: Entity): boolean => !!bot.landing && bot.landing.riders.includes(u.id);
+
+/**
+ * Sea landings (Inland Sea, Normal and Hard): every other attack, up to 8 idle
+ * soldiers board the transport, sail round to the shore nearest an enemy
+ * building deep in its land, and storm ashore there instead of crossing the
+ * sandbars. Returns true while a landing is being launched, so the normal
+ * attack waits.
+ */
+function landing(w: World, bot: Bot): boolean {
+  const L = bot.landing;
+  if (L) {
+    const boat = w.get(L.boat);
+    const riders = L.riders.map((id) => w.get(id)).filter((u): u is Entity => !!u);
+    if (!boat || riders.length === 0) {
+      bot.landing = null;
+      return false;
+    }
+    if (L.phase === 'boarding') {
+      const aboard = garrisoned(w, boat).length;
+      // the target fell already (the main army got there first): pick another
+      if (!w.get(L.target)) L.target = landingTarget(w, bot)?.id ?? 0;
+      const target = w.get(L.target);
+      // everyone aboard, or the stragglers took too long: set sail
+      if (target && (aboard === riders.length || (w.time - L.since > 45 && aboard >= 3))) {
+        if (orderUnload(w, [boat], target.x, target.y)) {
+          L.phase = 'sailing';
+          L.since = w.time;
+          bot.landingsSent++;
+        }
+      } else if (!target || w.time - L.since > 90) {
+        // give up: everyone off again, and nobody left waiting to board
+        landPassengers(w, boat);
+        for (const u of riders) if (u.order.type === 'board') setOrder(u, { type: 'idle' });
+        bot.landing = null;
+      }
+      return true;
+    }
+    // sailing: done once everyone is ashore (they march on the target themselves)
+    if (garrisoned(w, boat).length === 0 && boat.order.type !== 'unload') {
+      bot.landing = null;
+      const dock = teamBuildings(w, bot.team, 'dock', true)[0];
+      if (dock) orderMove(w, [boat], dock.x, dock.y);
+    }
+    return false;
+  }
+  if (w.river !== 'sea' || bot.diffKey === 'easy' || bot.attacksSent === 0 || bot.attacksSent % 2 === 0) return false;
+  const boat = teamUnits(w, bot.team, 'transportBoat').find((b) => b.order.type === 'idle' && garrisoned(w, b).length === 0);
+  if (!boat) return false;
+  const idle = w.units.filter((u) => !u.dead && u.team === bot.team && isSoldier(u) && !isNaval(u) && !u.inside && u.type !== 'scout' && u.order.type === 'idle' && !bot.defending.has(u.id));
+  if (idle.length < Math.min(6, bot.attackSize)) return false;
+  const target = landingTarget(w, bot);
+  if (!target) return false;
+  const riders = idle.sort((a, b) => Math.hypot(a.x - boat.x, a.y - boat.y) - Math.hypot(b.x - boat.x, b.y - boat.y)).slice(0, 8);
+  orderBoard(w, riders, boat);
+  bot.landing = { boat: boat.id, riders: riders.map((u) => u.id), target: target.id, phase: 'boarding', since: w.time };
+  bot.attacksSent++;
+  bot.attackSize += Math.max(1, Math.round(bot.opening.attackGrow * bot.diff.armyScale));
+  return true;
+}
+
 export function updateBot(w: World, bot: Bot, dt: number): void {
   bot.t -= dt;
   if (bot.t > 0) return;
@@ -432,5 +522,5 @@ export function updateBot(w: World, bot: Bot, dt: number): void {
   economy(w, bot, tc);
   naval(w, bot, tc);
   military(w, bot);
-  attack(w, bot, tc);
+  if (!landing(w, bot)) attack(w, bot, tc);
 }
