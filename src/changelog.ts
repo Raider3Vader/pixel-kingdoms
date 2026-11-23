@@ -9,6 +9,12 @@ export interface ChangelogEntry {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    version: '0.11.2',
+    date: '2026-11-23',
+    title: 'Select all idle villagers',
+    items: ['Press Q twice within half a second, or Shift + Q, to select every idle villager at once. A single Q still jumps to the next idle villager. Shift-clicking the idle button in the top bar does the same.'],
+  },
+  {
     version: '0.11.1',
     date: '2026-11-23',
     title: 'Bigger button pictures',

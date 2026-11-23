@@ -814,10 +814,24 @@ export class Game {
     this.hudT = 0;
   }
 
-  private nextIdleVillager(): void {
+  private lastIdlePress = -1;
+
+  /**
+   * Q (or the idle button): the next idle villager. Press it twice within half a
+   * second, or hold Shift, to select every idle villager at once.
+   */
+  private nextIdleVillager(all = false): void {
     const idle = this.world.units.filter((u) => u.team === PLAYER && u.type === 'villager' && u.order.type === 'idle');
     if (!idle.length) {
       this.audio.play('error');
+      return;
+    }
+    const now = performance.now();
+    const double = now - this.lastIdlePress < 500;
+    this.lastIdlePress = double ? -1 : now;
+    if (all || double) {
+      this.select(idle);
+      this.toast(`${idle.length} idle villager${idle.length === 1 ? '' : 's'} selected.`);
       return;
     }
     const cur = this.selected.length === 1 ? idle.indexOf(this.selected[0]) : -1;
@@ -992,7 +1006,7 @@ export class Game {
       }
       this.hudT = 0;
     });
-    on($('idle-btn'), 'click', () => this.nextIdleVillager());
+    on($('idle-btn'), 'click', (e) => this.nextIdleVillager((e as MouseEvent).shiftKey));
   }
 
   private showTip(cmd: Cmd | null, el: HTMLElement | null): void {
@@ -1214,7 +1228,7 @@ export class Game {
       return;
     }
     if (k === '.' || k === 'q') {
-      this.nextIdleVillager();
+      this.nextIdleVillager(e.shiftKey);
       return;
     }
     if (k === ' ') {
