@@ -9,6 +9,12 @@ export interface ChangelogEntry {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    version: '0.11.1',
+    date: '2026-11-23',
+    title: 'Bigger button pictures',
+    items: ['The pictures on the building and menu buttons are bigger, so they are easier to tell apart. The buttons stay the same size.'],
+  },
+  {
     version: '0.11.0',
     date: '2026-11-23',
     title: 'New villager menu',

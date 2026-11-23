@@ -228,9 +228,9 @@ button:focus-visible {
 }
 .cmd.narrow canvas,
 .cmd.wide canvas {
-  width: calc(11px * var(--s)) !important;
-  height: calc(11px * var(--s)) !important;
-  margin-top: calc(7px * var(--s));
+  width: calc(17px * var(--s)) !important;
+  height: calc(17px * var(--s)) !important;
+  margin-top: calc(8px * var(--s));
 }
 .cmd.narrow .cost {
   display: flex;
