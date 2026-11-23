@@ -294,7 +294,7 @@ function economy(w: World, bot: Bot, tc: Entity): void {
     tryBuild(w, bot, 'barracks', toward.x, toward.y, 2, 9);
   } else if (team.age >= 1 && count('stable') === 0 && allMix.includes('cavalry')) {
     tryBuild(w, bot, 'stable', toward.x, toward.y, 2, 10);
-  } else if (team.age >= 1 && count('pagoda') === 0 && allMix.includes('samurai') && vills.length >= 16) {
+  } else if (team.age >= 2 && count('pagoda') === 0 && allMix.includes('samurai') && vills.length >= 16) {
     if (!tryBuild(w, bot, 'pagoda', toward.x, toward.y, 3, 11)) bot.reserve = BUILDINGS.pagoda.cost;
   } else if (count('barracks') === 1 && bot.diffKey !== 'easy' && vills.length >= 20) {
     tryBuild(w, bot, 'barracks', toward.x, toward.y, 2, 10);

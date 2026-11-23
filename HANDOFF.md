@@ -1,6 +1,6 @@
 # Pixel Kingdoms: handoff
 
-Read this first in a new chat. Last updated 2026-11-22, version **0.10.3**.
+Read this first in a new chat. Last updated 2026-11-22, version **0.11.0**.
 
 ## 1. Where everything is
 
@@ -24,7 +24,7 @@ Read this first in a new chat. Last updated 2026-11-22, version **0.10.3**.
 - **Keep Classic hidden.** Its art is still in `src/render/sprites.ts`, but `setTheme` always forces `sakura`, and the Theme menu option was removed on request.
 - Test UI changes in the browser at a desktop size and at a small or zoomed-in size (about 600 x 336). The owner's browser is zoomed to about 165%.
 
-## 3. What the game has (0.10.3)
+## 3. What the game has (0.11.0)
 
 - **Screens:** a title screen (a villager chased by a rider), a menu (difficulty, map: Rivers or Inland Sea, Controls, Open changelog, Sound, Music, Full screen), pause and an end screen with a stats table and graphs (army, villagers, resources over time; `src/stats.ts`, data from `World.history`, a snapshot every 10 s).
 - **Music:** made live in `src/audio.ts` (`Music`, `TRACKS`): a calm loop (D yo scale, koto, drone, flute) and a battle loop (E in scale, taiko). `Game.updateMood()` switches to battle after `MUSIC_MOOD` hits nearby and back to calm after a quiet spell. The game fills the whole window at a whole-number pixel scale.
@@ -43,20 +43,20 @@ Read this first in a new chat. Last updated 2026-11-22, version **0.10.3**.
   - Archer (Feudal), then Longbowman.
   - Cavalry (Feudal, from the Stable), then Knight.
   - Scout (a fast sword rider; each side starts with one).
-  - Samurai (Feudal, from the Pagoda), then Elite Samurai: bonus damage against swords, spears and archers.
+  - Samurai (Imperial, from the Pagoda): bonus damage against swords, spears and archers; beats one Champion, loses to two.
   - Fishing boat, War boat (then Heavy war boat) and Transport boat (carries 8, `carries` in `UNITS`), all from the Dock. Boats are `naval` in `UNITS`.
 - **Combat rules:** spears get a big bonus against all horses. Cavalry is a bit stronger than swords and faster. Archers do well against most things, but heavy armor reduces arrow damage, and archers do half damage in close quarters. Armor is shown as melee/arrow.
 - **Buildings:**
   - Town Center, House, Rice paddy, Storehouse, Barracks.
   - Stable and Market (Feudal).
-  - Pagoda (Feudal): trains Samurai. Dock: must touch water (`canPlace` returns 'shore' otherwise); trains boats, and fishing boats drop their catch there.
+  - Pagoda (Imperial): trains Samurai. Dock: must touch water (`canPlace` returns 'shore' otherwise); trains boats, and fishing boats drop their catch there.
   - Wooden walls and gates; stone walls and gates (Feudal). Gates let only their own side through, and Z locks them.
   - Watch tower (sight 11). Guard tower (Feudal, or upgrade a watch tower): holds 5 troops, and each archer inside adds an arrow.
   - Villagers repair damaged buildings for 25% of the build cost.
 - **Controls:**
   - Left click or drag to select. Right click for orders, repair, entering towers and rally points.
   - Shift + right-click queues orders, shown with flags. Double-click selects all of a type (double-clicking a building selects all of that building, and a train key queues one unit in each).
-  - Z X C V B N are the command buttons; F flips a villager's build menu through Build, Army and Walls.
+  - Z X C V B N are the command buttons. Villagers first get Village (Z), Military (X), Defenses (C) and Repair (V) (`buildMenu` in `game.ts`); inside a section F or Esc goes back. Repair is a mode: click a damaged building. Building buttons are `size: 'narrow'` (half width, small icon, cost as coloured numbers); section buttons `size: 'wide'`.
   - Soldier commands: Z line, X block, C box formation; V Hostile on/off; B Stand down.
   - H selects the Town Center, Q the next idle villager. Ctrl + 1-9 saves a group, 1-9 selects it, and Shift + 1-9 adds it to the selection. Space jumps to the last alert. M mutes, Esc pauses.
   - Walls: click a start tile, then an end tile. Gates are two tiles: two 1-tile gate entities linked by `partner` (`placeGate`, `canPlaceGate`, `gateTiles`), running along the wall (`gateVertical`; R turns it when there is no wall). Put on walls they replace them and refund the walls in full. Lock, select and delete act on both halves. Wall lines are 4-connected (`lineTiles` adds the corner tile on diagonal steps), up to 32 pieces.

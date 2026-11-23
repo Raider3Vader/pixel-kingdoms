@@ -9,6 +9,18 @@ export interface ChangelogEntry {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    version: '0.11.0',
+    date: '2026-11-23',
+    title: 'New villager menu',
+    items: [
+      'Selecting villagers now shows four choices: Village (Z), Military (X), Defenses (C) and Repair (V).',
+      'Village has houses, rice paddies, storehouses, the Dock and the Market. Military has the Barracks, the Stable and the Pagoda. Defenses has walls, gates and towers. Press F or Esc to go back.',
+      'Repair: press V, then click a damaged building, and the selected villagers go and fix it. Hold Shift to repair several.',
+      'Building buttons are half as wide, with smaller pictures. The cost shows as numbers in each resource colour (red food, brown wood, gold, grey stone), as in the top bar.',
+      'The Pagoda and Samurai now need the Imperial Age. Samurai were rebalanced: a bit better than a Champion one on one, but two Champions beat one.',
+    ],
+  },
+  {
     version: '0.10.3',
     date: '2026-11-23',
     title: 'Wide gates and joined walls',

@@ -19,6 +19,7 @@ import {
   entityAt,
   isSoldier,
   orderMove,
+  orderRepair,
   buyResource,
   canAfford,
   cancelResearch,
@@ -51,10 +52,11 @@ import {
   type Entity,
 } from './sim/world';
 
-type Mode = { kind: 'none' } | { kind: 'place'; type: BuildingType } | { kind: 'wall'; type: BuildingType; start: { tx: number; ty: number } | null } | { kind: 'attackMove' };
+type Mode = { kind: 'none' } | { kind: 'place'; type: BuildingType } | { kind: 'wall'; type: BuildingType; start: { tx: number; ty: number } | null } | { kind: 'attackMove' } | { kind: 'repair' };
 
 interface Cmd {
   key: string;
+  size?: 'narrow' | 'wide'; // narrow: a building with its cost; wide: a menu section with a name
   icon: string;
   label: string;
   status?: string; // short state shown under the icon, e.g. On / Off
@@ -88,9 +90,9 @@ const TIPS: Record<string, string> = {
   archer: 'Good against most things from range. Weak up close and against heavy armor.',
   cavalry: 'Fast and a bit stronger than swordsmen. Runs down archers. Fears spears.',
   scout: 'Very fast and sees far. Weak arrows from 3 tiles. Explores without picking fights.',
-  pagoda: 'A five-storey pagoda where Samurai train.',
+  pagoda: 'A five-storey pagoda where Samurai train. Imperial Age.',
   dock: 'Build it on the shore. Trains fishing boats and war boats; fishing boats bring their catch here.',
-  samurai: 'Elite swordsman: quick, heavy blows that cut down swordsmen, spearmen and archers. Costs gold.',
+  samurai: 'Elite swordsman of the Imperial Age: quick, heavy blows that cut down swordsmen, spearmen and archers. Costs gold.',
   fishingBoat: 'Catches fish out on the water and brings it back to a Dock. Cannot fight.',
   warBoat: 'Shoots arrows from the water at boats, troops and buildings near the shore. Strong against fishing boats.',
   transportBoat: 'Carries up to 8 troops or villagers across the water. Right-click it with troops to load them; right-click land with it to sail over and unload. Anyone aboard is lost if it sinks.',
@@ -415,7 +417,7 @@ export class Game {
         ctx.strokeRect(Math.round(x0) + 0.5, Math.round(y0) + 0.5, Math.round(x1 - x0), Math.round(y1 - y0));
       }
     }
-    this.canvas.style.cursor = this.mode.kind === 'attackMove' ? 'crosshair' : this.hoverIsEnemy() ? 'crosshair' : 'default';
+    this.canvas.style.cursor = this.mode.kind === 'attackMove' || this.mode.kind === 'repair' ? 'crosshair' : this.hoverIsEnemy() ? 'crosshair' : 'default';
   }
 
   private hoverIsEnemy(): boolean {
@@ -470,13 +472,15 @@ export class Game {
     // clicking either half of a gate selects the whole gate
     const extra = list.map((e) => (e.partner ? this.world.get(e.partner) : undefined)).filter((p): p is Entity => !!p && !list.includes(p));
     if (extra.length) list = [...list, ...new Set(extra)];
+    if (list.some((e) => e.type === 'villager') !== this.selected.some((e) => e.type === 'villager') || !list.length) this.buildMenu = 'top';
     this.selected = list;
     this.mode = { kind: 'none' };
     this.hudT = 0;
     if (sound && list.length) this.audio.play('select');
   }
 
-  private buildPage = 0; // villager build menu: 0 economy, 1 army, 2 defenses
+  /** The villager menu: the first choice, or one of its sections. */
+  private buildMenu: 'top' | 'village' | 'military' | 'defenses' = 'top';
 
   private commands(): Cmd[] {
     const w = this.world;
@@ -489,58 +493,86 @@ export class Game {
     const keys = ['Z', 'X', 'C', 'V', 'B', 'N'];
     const lockedTip = (age: number): string => `Needs the ${AGES[age].name}.`;
     if (vills.length) {
-      const pages: BuildingType[][] = [
-        ['house', 'farm', 'storehouse', 'dock', 'market'],
-        ['barracks', 'stable', 'pagoda'],
-        ['wall', 'gate', 'watchTower', 'stoneWall', 'stoneGate', 'guardTower'],
-      ];
-      pages[this.buildPage].forEach((b, i) => {
-        const s = BUILDINGS[b];
-        const ageOk = team.age >= s.age;
+      const SECTIONS = {
+        village: { key: 'Z', icon: 'house', label: 'Village', list: ['house', 'farm', 'storehouse', 'dock', 'market'] as BuildingType[], tip: 'Houses, rice paddies, storehouses, the Dock and the Market.' },
+        military: { key: 'X', icon: 'barracks', label: 'Military', list: ['barracks', 'stable', 'pagoda'] as BuildingType[], tip: 'The Barracks, the Stable, and the Pagoda for Samurai.' },
+        defenses: { key: 'C', icon: 'wall', label: 'Defenses', list: ['wall', 'gate', 'watchTower', 'stoneWall', 'stoneGate', 'guardTower'] as BuildingType[], tip: 'Walls, gates and towers.' },
+      };
+      if (this.buildMenu === 'top') {
+        // the first menu: pick a kind of building, or repair
+        for (const [name, sec] of Object.entries(SECTIONS) as [keyof typeof SECTIONS, (typeof SECTIONS)['village']][]) {
+          out.push({
+            key: sec.key,
+            icon: sec.icon,
+            label: sec.label,
+            size: 'wide',
+            enabled: true,
+            tip: sec.tip,
+            run: () => {
+              this.buildMenu = name;
+              this.audio.play('click');
+            },
+          });
+        }
+        const damaged = w.buildings.some((b) => !b.dead && b.team === PLAYER && b.progress >= 1 && b.hp < b.maxHp);
         out.push({
-          key: keys[i],
-          icon: b,
-          label: s.name,
-          cost: s.cost,
-          enabled: ageOk && canAfford(w, PLAYER, s.cost),
-          locked: !ageOk,
-          active: (this.mode.kind === 'place' || this.mode.kind === 'wall') && this.mode.type === b,
-          tip: (ageOk ? '' : lockedTip(s.age) + ' ') + TIPS[b] + (s.wall && !s.gate ? ' Click a start tile, then an end tile.' : ''),
+          key: 'V',
+          icon: 'repair',
+          label: 'Repair',
+          size: 'wide',
+          enabled: true,
+          active: this.mode.kind === 'repair',
+          tip: `Click a damaged building to repair it, for a quarter of its price. ${damaged ? '' : 'Nothing is damaged right now.'}`,
           run: () => {
-            if (!ageOk) {
-              this.audio.play('error');
-              this.toast(`${s.name}: ${lockedTip(s.age)}`);
-              return;
-            }
-            const short = shortOf(w, PLAYER, s.cost);
-            if (short) {
-              this.audio.play('error');
-              this.toast(`Not enough ${short} (${costText(s.cost)}).`);
-              return;
-            }
-            this.mode = s.wall && !s.gate ? { kind: 'wall', type: b, start: null } : { kind: 'place', type: b };
+            this.mode = this.mode.kind === 'repair' ? { kind: 'none' } : { kind: 'repair' };
             this.audio.play('click');
           },
         });
-      });
-      // F flips through the three pages; the button shows the page it goes to next
-      const NEXT = [
-        { icon: 'barracks', label: 'Army', tip: 'Army buildings: Barracks, Stable and Pagoda.' },
-        { icon: 'wall', label: 'Walls', tip: 'Walls, gates and towers.' },
-        { icon: 'house', label: 'Build', tip: 'Houses, rice paddies, storehouses, docks and the market.' },
-      ][this.buildPage];
-      out.push({
-        key: 'F',
-        icon: NEXT.icon,
-        label: NEXT.label,
-        enabled: true,
-        tip: NEXT.tip,
-        run: () => {
-          this.buildPage = (this.buildPage + 1) % 3;
-          this.mode = { kind: 'none' };
-          this.audio.play('click');
-        },
-      });
+      } else {
+        SECTIONS[this.buildMenu].list.forEach((b, i) => {
+          const s = BUILDINGS[b];
+          const ageOk = team.age >= s.age;
+          out.push({
+            key: keys[i],
+            icon: b,
+            label: s.name,
+            size: 'narrow',
+            cost: s.cost,
+            enabled: ageOk && canAfford(w, PLAYER, s.cost),
+            locked: !ageOk,
+            active: (this.mode.kind === 'place' || this.mode.kind === 'wall') && this.mode.type === b,
+            tip: (ageOk ? '' : lockedTip(s.age) + ' ') + TIPS[b] + (s.wall && !s.gate ? ' Click a start tile, then an end tile.' : ''),
+            run: () => {
+              if (!ageOk) {
+                this.audio.play('error');
+                this.toast(`${s.name}: ${lockedTip(s.age)}`);
+                return;
+              }
+              const short = shortOf(w, PLAYER, s.cost);
+              if (short) {
+                this.audio.play('error');
+                this.toast(`Not enough ${short} (${costText(s.cost)}).`);
+                return;
+              }
+              this.mode = s.wall && !s.gate ? { kind: 'wall', type: b, start: null } : { kind: 'place', type: b };
+              this.audio.play('click');
+            },
+          });
+        });
+        out.push({
+          key: 'F',
+          icon: 'back',
+          label: 'Back',
+          size: 'narrow',
+          enabled: true,
+          tip: 'Back to Village, Military, Defenses and Repair (F or Esc).',
+          run: () => {
+            this.buildMenu = 'top';
+            this.mode = { kind: 'none' };
+            this.audio.play('click');
+          },
+        });
+      }
     } else if (sel.some((e) => capacityOf(e) > 0) && !soldiers.length) {
       const ships = sel.filter((e) => capacityOf(e) > 0);
       const n = ships.reduce((a, b) => a + garrisoned(w, b).length, 0);
@@ -832,6 +864,20 @@ export class Game {
         }
         if (this.mode.kind === 'place') {
           this.tryPlace(e.shiftKey);
+          return;
+        }
+        if (this.mode.kind === 'repair') {
+          const b = entityAt(this.world, wp.x, wp.y, (e) => e.kind === 'building' && e.team === PLAYER);
+          const vills = this.mySel().filter((u) => u.type === 'villager');
+          if (b && b.hp < b.maxHp && b.progress >= 1) {
+            orderRepair(this.world, vills, b);
+            this.fx.marker(b.x, b.y, false);
+            this.audio.play('command');
+            if (!e.shiftKey) this.mode = { kind: 'none' };
+          } else {
+            this.audio.play('error');
+            this.toast(b ? 'That building is not damaged.' : 'Click one of your damaged buildings.');
+          }
           return;
         }
         if (this.mode.kind === 'attackMove') {
@@ -1192,6 +1238,11 @@ export class Game {
 
   /** Cancels building placement or attack-move. Returns true if there was one. */
   cancelMode(): boolean {
+    if (this.mode.kind === 'none' && this.buildMenu !== 'top' && this.mySel().some((e) => e.type === 'villager')) {
+      this.buildMenu = 'top';
+      this.cmdKey = '-';
+      return true;
+    }
     if (this.mode.kind === 'none') return false;
     this.mode = { kind: 'none' };
     this.cmdKey = '-';
@@ -1238,7 +1289,7 @@ export class Game {
 
     // command buttons: rebuild only when something changed
     this.cmds = this.commands();
-    const key = this.cmds.map((c) => `${c.label}:${c.enabled}:${c.active}:${c.icon}`).join('|') + this.mySel().map((s) => s.id).join(',');
+    const key = this.cmds.map((c) => `${c.label}:${c.enabled}:${c.active}:${c.icon}:${c.locked}`).join('|') + this.mySel().map((s) => s.id).join(',');
     if (key !== this.cmdKey) {
       this.cmdKey = key;
       const box = $('cmds');
@@ -1258,9 +1309,19 @@ export class Game {
         k.className = 'key';
         k.textContent = c.key;
         b.appendChild(k);
+        if (c.size) b.classList.add(c.size);
         const cost = document.createElement('span');
         cost.className = 'cost';
-        cost.textContent = cancel ? 'Cancel' : c.locked ? 'Locked' : c.status ? `${c.label} ${c.status}` : c.cost && Object.keys(c.cost).length ? shortCost(c.cost) : c.label;
+        if (c.size === 'narrow' && c.cost && Object.keys(c.cost).length && !cancel) {
+          // one number per resource, in that resource's colour (as in the top bar)
+          for (const [k, v] of Object.entries(c.cost)) {
+            if (!v) continue;
+            const n = document.createElement('i');
+            n.className = `c-${k}`;
+            n.textContent = String(v);
+            cost.appendChild(n);
+          }
+        } else if (c.size !== 'narrow') cost.textContent = cancel ? 'Cancel' : c.locked ? 'Locked' : c.status ? `${c.label} ${c.status}` : c.cost && Object.keys(c.cost).length ? shortCost(c.cost) : c.label;
         b.appendChild(cost);
         box.appendChild(b);
       });

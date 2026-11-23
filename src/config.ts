@@ -128,7 +128,7 @@ export const BUILDINGS: Record<BuildingType, BuildingStats> = {
   stoneGate: B({ name: 'Stone gate', cost: { stone: 30 }, age: 1, buildSec: 15, size: 1, hp: 900, sight: 3, wall: true, gate: true }),
   watchTower: B({ name: 'Watch tower', cost: { wood: 60 }, buildSec: 25, size: 1, hp: 250, sight: 11 }),
   guardTower: B({ name: 'Guard tower', cost: { wood: 50, stone: 125 }, age: 1, buildSec: 45, size: 1, hp: 700, sight: 10, attack: 5, attackSec: 1.5, rangeTiles: 7, garrison: 5 }),
-  pagoda: B({ name: 'Pagoda', cost: { wood: 175, stone: 100 }, age: 1, buildSec: 50, size: 2, hp: 500, sight: 6, trains: ['samurai'] }),
+  pagoda: B({ name: 'Pagoda', cost: { wood: 175, stone: 100 }, age: 2, buildSec: 50, size: 2, hp: 500, sight: 6, trains: ['samurai'] }),
   // built on the shore; boats are trained here and fishing boats bring their catch back to it
   dock: B({ name: 'Dock', cost: { wood: 120 }, buildSec: 35, size: 2, hp: 300, sight: 6, trains: ['fishingBoat', 'warBoat', 'transportBoat'] }),
 };
@@ -265,7 +265,7 @@ export const UNITS = {
 UNITS.samurai = {
   name: 'Samurai',
   cost: { food: 65, gold: 45 },
-  age: 1,
+  age: 2,
   rangeTiles: 0,
   speed: 1.5,
   trainSec: 18,
@@ -274,9 +274,10 @@ UNITS.samurai = {
   bonus: { swordsman: 3, spearman: 3, archer: 3 },
   vsBuildings: 1.2,
   tiers: [
-    { name: 'Samurai', hp: 60, attack: 8, attackSec: 0.8, armor: 1, arrowArmor: 1 },
-    { name: 'Samurai', hp: 60, attack: 8, attackSec: 0.8, armor: 1, arrowArmor: 1 },
-    { name: 'Elite Samurai', hp: 80, attack: 10, attackSec: 0.75, armor: 2, arrowArmor: 3 },
+    // Imperial Age only: a bit better than a Champion man for man, at a gold price
+    { name: 'Samurai', hp: 75, attack: 9, attackSec: 0.8, armor: 2, arrowArmor: 3 },
+    { name: 'Samurai', hp: 75, attack: 9, attackSec: 0.8, armor: 2, arrowArmor: 3 },
+    { name: 'Samurai', hp: 75, attack: 9, attackSec: 0.8, armor: 2, arrowArmor: 3 },
   ],
 };
 UNITS.fishingBoat = {

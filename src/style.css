@@ -221,6 +221,46 @@ button:focus-visible {
   text-align: center;
   line-height: 1.15;
 }
+/* building buttons: half as wide, a small picture, and the cost as coloured numbers */
+.cmd.narrow {
+  width: calc(23px * var(--s));
+  padding: calc(1px * var(--s)) 0;
+}
+.cmd.narrow canvas,
+.cmd.wide canvas {
+  width: calc(11px * var(--s)) !important;
+  height: calc(11px * var(--s)) !important;
+  margin-top: calc(7px * var(--s));
+}
+.cmd.narrow .cost {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  font-size: calc(6px * var(--s));
+  line-height: 1.25;
+}
+.cmd.narrow .cost i {
+  font-style: normal;
+}
+/* menu sections: a small picture and the name */
+.cmd.wide {
+  width: calc(70px * var(--s));
+}
+.cmd.wide .cost {
+  color: var(--text);
+}
+.c-food {
+  color: #ef7d57;
+}
+.c-wood {
+  color: #d9a066;
+}
+.c-gold {
+  color: #ffcd75;
+}
+.c-stone {
+  color: #b8c6d4;
+}
 .cmd.long-cost canvas {
   width: calc(12px * var(--s)) !important;
   height: calc(12px * var(--s)) !important;

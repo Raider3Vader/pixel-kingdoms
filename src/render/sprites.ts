@@ -644,6 +644,25 @@ export function iconFor(type: string, team = 0, tier = 0): HTMLCanvasElement {
     });
   }
   if (['villager', 'swordsman', 'spearman', 'archer', 'cavalry', 'scout', 'samurai', 'fishingBoat', 'warBoat', 'transportBoat'].includes(type)) return unitSprite(type, team, 'idle', 0, type === 'transportBoat' ? '4' : '', tier);
+  if (type === 'repair') {
+    // a carpenter's mallet
+    return make('icon:repair', 16, 16, (px) => {
+      px(2, 2, 8, 5, PAL.woodLight);
+      px(2, 2, 8, 1, '#e0b07a');
+      px(2, 6, 8, 1, PAL.wood);
+      px(5, 7, 2, 8, PAL.wood);
+      px(5, 7, 1, 8, PAL.woodLight);
+      px(10, 11, 4, 1, PAL.silver);
+      px(12, 9, 1, 5, PAL.silver);
+    });
+  }
+  if (type === 'back') {
+    // an arrow pointing left
+    return make('icon:back', 16, 16, (px) => {
+      px(5, 7, 9, 2, PAL.white);
+      for (let i = 0; i < 4; i++) px(2 + i, 7 - i, 1, 2 + i * 2, PAL.white);
+    });
+  }
   if (type === 'unload') {
     // a little boat with an arrow stepping onto the shore
     return make('icon:unload', 16, 16, (px) => {
