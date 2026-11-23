@@ -242,6 +242,19 @@ button:focus-visible {
 .cmd.narrow .cost i {
   font-style: normal;
 }
+/* soldier orders: just the picture, filling the button; the name shows on hover */
+.cmd.icon {
+  width: calc(23px * var(--s));
+  padding: calc(1px * var(--s)) 0;
+}
+.cmd.icon canvas {
+  width: calc(19px * var(--s)) !important;
+  height: calc(19px * var(--s)) !important;
+  margin-top: calc(11px * var(--s));
+}
+.cmd.icon .cost {
+  display: none;
+}
 /* menu sections: a small picture and the name */
 .cmd.wide {
   width: calc(70px * var(--s));

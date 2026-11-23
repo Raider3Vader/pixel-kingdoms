@@ -56,7 +56,7 @@ type Mode = { kind: 'none' } | { kind: 'place'; type: BuildingType } | { kind: '
 
 interface Cmd {
   key: string;
-  size?: 'narrow' | 'wide'; // narrow: a building with its cost; wide: a menu section with a name
+  size?: 'narrow' | 'wide' | 'icon'; // narrow: a building with its cost; wide: a menu section with a name; icon: just the picture (the name shows on hover)
   icon: string;
   label: string;
   status?: string; // short state shown under the icon, e.g. On / Off
@@ -487,6 +487,7 @@ export class Game {
     const sel = this.mySel();
     const team = w.teams[PLAYER];
     const out: Cmd[] = [];
+    let iconOnly = false; // soldier orders: picture-only buttons
     if (sel.length === 0) return out;
     const vills = sel.filter((e) => e.type === 'villager');
     const soldiers = sel.filter(isSoldier);
@@ -593,6 +594,7 @@ export class Game {
         },
       });
     } else if (soldiers.length) {
+      iconOnly = true;
       const current = soldiers.every((u) => u.formation === soldiers[0].formation) ? soldiers[0].formation : null;
       const forms: [string, 'line' | 'block' | 'box', string, string][] = [
         ['Z', 'line', 'Line', 'One wide row, side by side. Archers stand behind when there are many.'],
@@ -777,6 +779,8 @@ export class Game {
         });
       }
     }
+    // soldier orders show just their pictures; hovering shows the name
+    if (iconOnly) for (const c of out) c.size = 'icon';
     return out;
   }
 
@@ -1016,7 +1020,7 @@ export class Game {
       return;
     }
     const cost = cmd.cost ? costText(cmd.cost) : '';
-    tip.innerHTML = `<div class="t">${cmd.label} (${cmd.key})</div>${cost ? `<div class="dim">${cost}</div>` : ''}<div>${cmd.tip}</div>`;
+    tip.innerHTML = `<div class="t">${cmd.label}${cmd.status ? `: ${cmd.status}` : ''} (${cmd.key})</div>${cost ? `<div class="dim">${cost}</div>` : ''}<div>${cmd.tip}</div>`;
     tip.classList.remove('hidden');
     const stage = $('stage').getBoundingClientRect();
     const r = el.getBoundingClientRect();
@@ -1335,7 +1339,7 @@ export class Game {
             n.textContent = String(v);
             cost.appendChild(n);
           }
-        } else if (c.size !== 'narrow') cost.textContent = cancel ? 'Cancel' : c.locked ? 'Locked' : c.status ? `${c.label} ${c.status}` : c.cost && Object.keys(c.cost).length ? shortCost(c.cost) : c.label;
+        } else if (c.size !== 'narrow' && c.size !== 'icon') cost.textContent = cancel ? 'Cancel' : c.locked ? 'Locked' : c.status ? `${c.label} ${c.status}` : c.cost && Object.keys(c.cost).length ? shortCost(c.cost) : c.label;
         b.appendChild(cost);
         box.appendChild(b);
       });

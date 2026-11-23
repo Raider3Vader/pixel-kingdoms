@@ -9,7 +9,7 @@ export interface ChangelogEntry {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
-    version: '0.11.2',
+    version: '0.11.3',
     date: '2026-11-23',
     title: 'Easier building, wide gates',
     items: [
@@ -17,6 +17,7 @@ export const CHANGELOG: ChangelogEntry[] = [
       'Village: houses, rice paddies, storehouses, the Dock and the Market. Military: Barracks, Stable and Pagoda. Defenses: walls, gates and towers.',
       'Repair: press V, then click a damaged building. Hold Shift to repair several.',
       'Building buttons are half as wide, with costs shown as numbers in each resource colour, as in the top bar.',
+      'Soldier orders (Line, Block, Box, Hostile, Stand down) are small picture buttons. Hover one to see its name.',
       'Gates are two tiles wide and turn to run along the wall. Away from walls, press R to turn one.',
       'Hold a gate over a wall to see it set into the wall. Placing it gives back the full cost of the wall pieces it replaces.',
       'Diagonal walls join up as a connected staircase, with no corner gaps. Wall lines can be up to 32 pieces long.',
