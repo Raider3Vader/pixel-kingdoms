@@ -1,6 +1,6 @@
 # Pixel Kingdoms: handoff
 
-Read this first in a new chat. Last updated 2026-11-22, version **0.10.2**.
+Read this first in a new chat. Last updated 2026-11-22, version **0.10.3**.
 
 ## 1. Where everything is
 
@@ -24,7 +24,7 @@ Read this first in a new chat. Last updated 2026-11-22, version **0.10.2**.
 - **Keep Classic hidden.** Its art is still in `src/render/sprites.ts`, but `setTheme` always forces `sakura`, and the Theme menu option was removed on request.
 - Test UI changes in the browser at a desktop size and at a small or zoomed-in size (about 600 x 336). The owner's browser is zoomed to about 165%.
 
-## 3. What the game has (0.10.2)
+## 3. What the game has (0.10.3)
 
 - **Screens:** a title screen (a villager chased by a rider), a menu (difficulty, map: Rivers or Inland Sea, Controls, Open changelog, Sound, Music, Full screen), pause and an end screen with a stats table and graphs (army, villagers, resources over time; `src/stats.ts`, data from `World.history`, a snapshot every 10 s).
 - **Music:** made live in `src/audio.ts` (`Music`, `TRACKS`): a calm loop (D yo scale, koto, drone, flute) and a battle loop (E in scale, taiko). `Game.updateMood()` switches to battle after `MUSIC_MOOD` hits nearby and back to calm after a quiet spell. The game fills the whole window at a whole-number pixel scale.
@@ -59,7 +59,7 @@ Read this first in a new chat. Last updated 2026-11-22, version **0.10.2**.
   - Z X C V B N are the command buttons; F flips a villager's build menu through Build, Army and Walls.
   - Soldier commands: Z line, X block, C box formation; V Hostile on/off; B Stand down.
   - H selects the Town Center, Q the next idle villager. Ctrl + 1-9 saves a group, 1-9 selects it, and Shift + 1-9 adds it to the selection. Space jumps to the last alert. M mutes, Esc pauses.
-  - Walls: click a start tile, then an end tile. A gate placed on your own wall piece swaps in (`wallUnder`).
+  - Walls: click a start tile, then an end tile. Gates are two tiles: two 1-tile gate entities linked by `partner` (`placeGate`, `canPlaceGate`, `gateTiles`), running along the wall (`gateVertical`; R turns it when there is no wall). Put on walls they replace them and refund the walls in full. Lock, select and delete act on both halves. Wall lines are 4-connected (`lineTiles` adds the corner tile on diagonal steps), up to 32 pieces.
   - Delete or Backspace destroys your selection (`deleteOwn`): unfinished buildings refund the unbuilt part, and the last Town Center is protected.
 - **Maps:** chosen on the menu (`MapKind` in `src/sim/map.ts`, saved as `pk-map`).
   - **Inland Sea** (`makeSea`, layout in `SEA`): home islands in opposite corners, a private back island each (gold, stone, persimmons), two islets and a central island with gold. Walkable sandbars (`bridge` code 2, like fords) join them. Woods only grow on the home islands, and `clearRoute` cuts tree-free routes to the enemy and every island resource on both sides, so every map is connected (checked on 300 seeds). `npm run balance -- normal normal inlandSea`: last run 31 of 32 games finished, in 13 to 30 minutes, and Boom is strongest there (14 wins).
@@ -91,7 +91,7 @@ Read this first in a new chat. Last updated 2026-11-22, version **0.10.2**.
 
 ## 5. Tools and tests
 
-- `npm test` runs 64 tests: economy, every combat matchup, ages, the market, gates, towers, repair, paddies, formations, queued orders, every river layout (mirrored and connected), and AI games including Hard beating Easy.
+- `npm test` runs 66 tests: economy, every combat matchup, ages, the market, gates, towers, repair, paddies, formations, queued orders, every river layout (mirrored and connected), and AI games including Hard beating Easy.
 - `npm run balance` plays every opening against every other (32 games, takes several minutes). The last run was fairly even, with games of about 11 to 22 minutes.
 - `npx tsx scripts/mappng.ts out.png 5 5:twin 5:sea` renders map overviews (`seed`, `seed:riverKind` or `seed:sea`). `scripts/showmap.ts` prints a map as text. `scripts/simulate.ts` traces one AI.
 - In the browser console, `pk()` returns the live Game. The built-in browser pane runs at about 1.5 fps when hidden, so drive time with `pk().update(1/60)` loops.

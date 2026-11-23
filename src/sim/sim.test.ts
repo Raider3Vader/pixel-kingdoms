@@ -22,6 +22,9 @@ import {
   orderMove,
   placeBuilding,
   placeWallLine,
+  canPlaceGate,
+  gateVertical,
+  lineTiles,
   queueOrder,
   spawnBuilding,
   spawnResource,
@@ -579,22 +582,47 @@ describe('delete and gates on walls', () => {
     expect(deleteOwn(w, PLAYER, [tc])).toBe('townCenter');
   });
 
-  it('a gate placed on a wall piece replaces it', () => {
+  it('a gate is two tiles; placed on a wall it swaps in and gives the wall back in full', () => {
     const w = testWorld();
     w.teams[PLAYER].wood = 500;
     expect(placeWallLine(w, PLAYER, 'wall', 20, 20, 26, 20, [], false)).toBe(7);
-    const mid = w.buildings.find((b) => b.type === 'wall' && b.tx === 23)!;
-    mid.progress = 1; // a finished piece works too
-    expect(canPlace(w, PLAYER, 'gate', 23, 20, false)).toBe('ok');
+    for (const b of w.buildings) if (b.type === 'wall') b.progress = 1; // finished walls
+    expect(gateVertical(w, PLAYER, 23, 20)).toBe(false);
+    expect(canPlaceGate(w, PLAYER, 'gate', 23, 20, false, false)).toBe('ok');
     expect(canPlace(w, PLAYER, 'house', 23, 20, false)).toBe('blocked');
-    expect(placeBuilding(w, PLAYER, 'gate', 23, 20, [], false)).toBe('ok');
-    expect(mid.dead).toBe(true);
-    expect(w.buildings.filter((b) => !b.dead && b.tx === 23 && b.ty === 20).map((b) => b.type)).toEqual(['gate']);
-    expect(w.buildings.filter((b) => !b.dead && b.type === 'wall').length).toBe(6);
-    // and on an unfinished piece, its wood comes back
     const before = w.teams[PLAYER].wood;
-    expect(placeBuilding(w, PLAYER, 'gate', 21, 20, [], false)).toBe('ok');
-    expect(w.teams[PLAYER].wood).toBe(before + BUILDINGS.wall.cost.wood! - BUILDINGS.gate.cost.wood!);
+    expect(placeBuilding(w, PLAYER, 'gate', 23, 20, [], false)).toBe('ok');
+    // both wall pieces came back in full; the gate was paid once
+    expect(w.teams[PLAYER].wood).toBe(before + 2 * BUILDINGS.wall.cost.wood! - BUILDINGS.gate.cost.wood!);
+    const gates = w.buildings.filter((b) => !b.dead && b.type === 'gate');
+    expect(gates.map((g) => `${g.tx},${g.ty}`).sort()).toEqual(['23,20', '24,20']);
+    expect(gates[0].partner).toBe(gates[1].id);
+    expect(w.buildings.filter((b) => !b.dead && b.type === 'wall').length).toBe(5);
+    // locking one half locks the whole gate
+    setGateLocked(w, gates[0], true);
+    expect(gates[1].locked).toBe(true);
+  });
+
+  it('a gate in a north-south wall runs north-south', () => {
+    const w = testWorld();
+    w.teams[PLAYER].wood = 500;
+    placeWallLine(w, PLAYER, 'wall', 30, 10, 30, 18, [], false);
+    expect(gateVertical(w, PLAYER, 30, 13)).toBe(true);
+    expect(placeBuilding(w, PLAYER, 'gate', 30, 13, [], false)).toBe('ok');
+    expect(w.buildings.filter((b) => !b.dead && b.type === 'gate').map((g) => `${g.tx},${g.ty}`).sort()).toEqual(['30,13', '30,14']);
+  });
+
+  it('diagonal walls join side by side, with no corner-only gaps', () => {
+    for (const [x0, y0, x1, y1] of [
+      [10, 10, 20, 20],
+      [10, 20, 22, 14],
+      [5, 5, 8, 17],
+    ]) {
+      const t = lineTiles(x0, y0, x1, y1);
+      expect(t[0]).toEqual({ x: x0, y: y0 });
+      expect(t[t.length - 1]).toEqual({ x: x1, y: y1 });
+      for (let i = 1; i < t.length; i++) expect(Math.abs(t[i].x - t[i - 1].x) + Math.abs(t[i].y - t[i - 1].y)).toBe(1);
+    }
   });
 });
 

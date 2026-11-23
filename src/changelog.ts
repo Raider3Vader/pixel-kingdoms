@@ -9,6 +9,19 @@ export interface ChangelogEntry {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    version: '0.10.3',
+    date: '2026-11-23',
+    title: 'Wide gates and joined walls',
+    items: [
+      'Gates are now two tiles wide, drawn as one gate with a door on each half. Clicking either half selects the whole gate, and Lock and Delete work on both halves.',
+      'While placing a gate over a wall, the preview sits right in the wall, with those wall pieces hidden underneath, so you can see exactly what it replaces.',
+      'A gate placed on a wall gives you back the full cost of the wall pieces it replaces.',
+      'A gate turns to run along the wall you put it in. In a north-south wall it is shown side-on. Away from walls, press R to turn it.',
+      'Diagonal walls now join up: a diagonal line is built as a connected staircase, with no corner gaps. Wall lines can be up to 32 pieces long.',
+      'Selecting a tree now shows the right picture and name: Cherry tree, Pine or Bamboo.',
+    ],
+  },
+  {
     version: '0.10.2',
     date: '2026-11-22',
     title: 'Enemy sea landings',

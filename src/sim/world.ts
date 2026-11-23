@@ -83,6 +83,7 @@ export interface Entity {
   hostile: boolean; // soldiers: chase any enemy in sight, even while marching
   inside: number; // id of the tower this unit is garrisoned in, or 0
   locked: boolean; // gates: closed to everyone
+  partner: number; // gates: the other half of a two-tile gate, or 0
   noReplant: boolean; // rice paddies: don't replant when it runs dry
   research: { key: 'age' | 'merchant' | 'towerUpgrade'; t: number; sec: number } | null;
   repairDebt: Cost; // fractional repair costs not yet paid
@@ -258,6 +259,7 @@ function blank(w: World, kind: Kind, type: string, team: number, x: number, y: n
     hostile: false,
     inside: 0,
     locked: false,
+    partner: 0,
     noReplant: false,
     research: null,
     repairDebt: {},
@@ -539,22 +541,82 @@ export function applyGate(w: World, b: Entity): void {
 }
 
 export function setGateLocked(w: World, b: Entity, locked: boolean): void {
-  b.locked = locked;
-  applyGate(w, b);
-  if (locked) for (const u of w.units) if (tileOf(u.x) === b.tx && tileOf(u.y) === b.ty) unstick(w, u);
+  // both halves of a gate lock together
+  const halves = [b, w.get(b.partner)].filter((g): g is Entity => !!g && !g.dead);
+  for (const g of halves) {
+    g.locked = locked;
+    applyGate(w, g);
+    if (locked) for (const u of w.units) if (tileOf(u.x) === g.tx && tileOf(u.y) === g.ty) unstick(w, u);
+  }
+}
+
+/** The two tiles a gate covers: the tile and the one east of it, or south of it when it runs north-south. */
+export function gateTiles(tx: number, ty: number, vertical: boolean): Pt[] {
+  return [
+    { x: tx, y: ty },
+    vertical ? { x: tx, y: ty + 1 } : { x: tx + 1, y: ty },
+  ];
+}
+
+/** Which way a gate placed here should run: along the wall it is put into (north-south if the wall runs that way). */
+export function gateVertical(w: World, team: number, tx: number, ty: number): boolean | null {
+  const own = (x: number, y: number): boolean => {
+    if (!w.inBounds(x, y)) return false;
+    const e = w.get(w.occ[y * w.w + x]);
+    return !!e && !e.dead && e.kind === 'building' && e.team === team && !!BUILDINGS[e.type as BuildingType].wall;
+  };
+  const ns = own(tx, ty - 1) || own(tx, ty + 1) || own(tx, ty + 2);
+  const ew = own(tx - 1, ty) || own(tx + 1, ty) || own(tx + 2, ty);
+  if (ns && !ew) return true;
+  if (ew && !ns) return false;
+  if (own(tx, ty) && own(tx, ty + 1) && !own(tx + 1, ty)) return true;
+  if (own(tx, ty) && own(tx + 1, ty)) return false;
+  return null; // no wall to follow: the player's choice
+}
+
+export function canPlaceGate(w: World, team: number, type: BuildingType, tx: number, ty: number, vertical: boolean, requireExplored = true): PlaceResult {
+  for (const t of gateTiles(tx, ty, vertical)) {
+    const r = canPlace(w, team, type, t.x, t.y, requireExplored);
+    if (r !== 'ok' && r !== 'cost') return r;
+  }
+  return canAfford(w, team, BUILDINGS[type].cost) ? 'ok' : 'cost';
+}
+
+/**
+ * A gate is two tiles wide. Put into a wall it replaces those wall pieces, and
+ * their full price comes back.
+ */
+export function placeGate(w: World, team: number, type: BuildingType, tx: number, ty: number, vertical: boolean, builders: Entity[], requireExplored = true): PlaceResult {
+  const r = canPlaceGate(w, team, type, tx, ty, vertical, requireExplored);
+  if (r !== 'ok') return r;
+  const halves: Entity[] = [];
+  for (const t of gateTiles(tx, ty, vertical)) {
+    const old = wallUnder(w, team, t.x, t.y);
+    if (old) {
+      refund(w, team, BUILDINGS[old.type as BuildingType].cost);
+      removeQuietly(w, old);
+    }
+  }
+  pay(w, team, BUILDINGS[type].cost);
+  for (const t of gateTiles(tx, ty, vertical)) halves.push(spawnBuilding(w, type, team, t.x, t.y, false));
+  halves[0].partner = halves[1].id;
+  halves[1].partner = halves[0].id;
+  w.emit({ t: 'placed', team, x: halves[0].x, y: halves[0].y });
+  for (const u of builders) {
+    if (u.type !== 'villager' || u.team !== team) continue;
+    const prev = u.order.type === 'gather' ? u.order : null;
+    setOrder(u, { type: 'build', target: halves[0].id, after: prev ? { ...prev, phase: 'go' } : null });
+  }
+  return 'ok';
 }
 
 // ---------- commands (used by the player's input and by the enemy AI) ----------
 
 export function placeBuilding(w: World, team: number, type: BuildingType, tx: number, ty: number, builders: Entity[], requireExplored = true): PlaceResult {
+  // gates are two tiles wide, running along the wall they go into
+  if (BUILDINGS[type].gate) return placeGate(w, team, type, tx, ty, gateVertical(w, team, tx, ty) ?? false, builders, requireExplored);
   const r = canPlace(w, team, type, tx, ty, requireExplored);
   if (r !== 'ok') return r;
-  // a gate placed on a wall piece takes its place (refunding whatever of the piece was not built yet)
-  const old = BUILDINGS[type].gate ? wallUnder(w, team, tx, ty) : null;
-  if (old) {
-    refundUnbuilt(w, old);
-    removeQuietly(w, old);
-  }
   pay(w, team, BUILDINGS[type].cost);
   const b = spawnBuilding(w, type, team, tx, ty, false);
   w.emit({ t: 'placed', team, x: b.x, y: b.y });
@@ -566,7 +628,7 @@ export function placeBuilding(w: World, team: number, type: BuildingType, tx: nu
   return 'ok';
 }
 
-/** Tiles on a straight line between two tiles (8-connected, so walls have no gaps). */
+/** Tiles on a straight line between two tiles. Diagonal steps get an extra tile so every piece joins the next side by side. */
 export function lineTiles(x0: number, y0: number, x1: number, y1: number): Pt[] {
   const out: Pt[] = [];
   const dx = Math.abs(x1 - x0);
@@ -580,11 +642,14 @@ export function lineTiles(x0: number, y0: number, x1: number, y1: number): Pt[] 
     out.push({ x, y });
     if (x === x1 && y === y1) break;
     const e2 = 2 * err;
-    if (e2 >= dy) {
+    const stepX = e2 >= dy;
+    const stepY = e2 <= dx;
+    if (stepX) {
       err += dy;
       x += sx;
     }
-    if (e2 <= dx) {
+    if (stepX && stepY) out.push({ x, y }); // the corner tile of a diagonal step
+    if (stepY) {
       err += dx;
       y += sy;
     }
@@ -592,7 +657,7 @@ export function lineTiles(x0: number, y0: number, x1: number, y1: number): Pt[] 
   return out;
 }
 
-export const MAX_WALL = 24;
+export const MAX_WALL = 32;
 
 /** The team's own wall piece (not a gate) on this tile, if any. */
 export function wallUnder(w: World, team: number, tx: number, ty: number): Entity | null {
@@ -633,6 +698,8 @@ export type DeleteResult = 'ok' | 'townCenter' | 'none';
  * buildings give back what was not built yet. Your last Town Center cannot be deleted.
  */
 export function deleteOwn(w: World, team: number, ents: Entity[]): DeleteResult {
+  // both halves of a gate go together
+  ents = [...new Set([...ents, ...ents.map((e) => w.get(e.partner)).filter((p): p is Entity => !!p)])];
   let n = 0;
   let keptTC = false;
   for (const e of ents) {

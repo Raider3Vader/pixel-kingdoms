@@ -31,6 +31,8 @@ export interface Ghost {
   tx: number;
   ty: number;
   ok: boolean;
+  vertical?: boolean; // gates: which way the two tiles run
+  half?: number; // gates: 0 the first tile, 1 the second
 }
 
 interface Corpse {
@@ -299,8 +301,11 @@ export function drawWorld(ctx: CanvasRenderingContext2D, w: World, terrain: HTML
   }
 
   // buildings
+  // wall pieces under a gate preview are hidden, so the gate shows set into the wall
+  const underGate = new Set(o.ghosts.filter((g) => g.vertical !== undefined).map((g) => g.ty * w.w + g.tx));
   for (const b of w.buildings) {
     if (b.dead || b.type === 'farm') continue;
+    if (underGate.size && b.size === 1 && underGate.has(b.ty * w.w + b.tx) && BUILDINGS[b.type as BuildingType].wall) continue;
     if (b.tx + b.size < tx0 || b.tx > tx1 || b.ty + b.size < ty0 || b.ty > ty1 + 1) continue;
     if (o.fog && b.team !== PLAYER && !b.seen) continue;
     items.push({
@@ -443,6 +448,11 @@ export function drawWorld(ctx: CanvasRenderingContext2D, w: World, terrain: HTML
     if (g.type === 'farm') {
       // rice paddies lie flat on the ground: preview the field itself
       ctx.drawImage(farmSprite(4, PLAYER), g.tx * T, g.ty * T);
+    } else if (g.vertical !== undefined) {
+      const variant = g.vertical ? (g.half === 0 ? 32 : 64) | 2 : g.half === 0 ? 8 : 16;
+      const gs = buildingSprite(g.type, PLAYER, variant);
+      ctx.globalAlpha = 0.85;
+      ctx.drawImage(gs, g.tx * T + Math.floor((T - gs.width) / 2), (g.ty + 1) * T - gs.height + buildingPad());
     } else {
       const gs = buildingSprite(g.type, PLAYER);
       ctx.drawImage(gs, g.tx * T + Math.floor((s * T - gs.width) / 2), (g.ty + s) * T - gs.height + buildingPad());
@@ -503,9 +513,14 @@ export function buildingVariant(w: World, b: Entity): number {
   };
   const mask = (isWall(b.tx, b.ty - 1) ? 1 : 0) | (isWall(b.tx + 1, b.ty) ? 2 : 0) | (isWall(b.tx, b.ty + 1) ? 4 : 0) | (isWall(b.tx - 1, b.ty) ? 8 : 0);
   if (!st.gate) return mask;
-  const vertical = (mask & 5) !== 0 && (mask & 10) === 0;
-  const open = !b.locked && b.progress >= 1 && w.units.some((u) => !u.dead && u.team === b.team && Math.abs(u.x - b.x) < 22 && Math.abs(u.y - b.y) < 22);
-  return (open ? 1 : 0) | (vertical ? 2 : 0) | (b.locked ? 4 : 0);
+  // the other half of a two-tile gate
+  const p = b.partner ? w.ents.get(b.partner) : undefined;
+  const half = p && !p.dead ? (p.tx > b.tx ? 8 : p.tx < b.tx ? 16 : p.ty > b.ty ? 32 : 64) : 0;
+  const vertical = half ? half >= 32 : (mask & 5) !== 0 && (mask & 10) === 0;
+  // a gate opens when your units are near either half
+  const near = (g: Entity): boolean => w.units.some((u) => !u.dead && u.team === b.team && Math.abs(u.x - g.x) < 22 && Math.abs(u.y - g.y) < 22);
+  const open = !b.locked && b.progress >= 1 && (near(b) || (!!p && !p.dead && near(p)));
+  return (open ? 1 : 0) | (vertical ? 2 : 0) | (b.locked ? 4 : 0) | half;
 }
 
 /** Where to draw a building sprite: centered on its footprint, bottom aligned. */
@@ -514,7 +529,7 @@ export function buildingPos(b: Entity, spr: HTMLCanvasElement): { x: number; y: 
 }
 
 /** Sakura forests: about 35% cherry blossom, 40% pine, 25% bamboo. */
-function treeVariant(id: number): number {
+export function treeVariant(id: number): number {
   const v = (id * 7919) % 20;
   return v < 7 ? id % 2 : v < 15 ? 2 : 3;
 }

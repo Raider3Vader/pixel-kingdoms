@@ -411,39 +411,78 @@ function wallPiece(px: Px, mask: number, stone: boolean, team: number): void {
   if (stone && mask === 0) px(6, g - 7, 4, 2, t.m); // a lone pillar gets a team badge
 }
 
-/** Gate (variant bits: 1 open, 2 runs north-south, 4 locked). */
+/**
+ * One tile of a gate. Variant bits: 1 open, 2 runs north-south, 4 locked;
+ * the other half of a two-tile gate is 8 east, 16 west, 32 south, 64 north.
+ */
 function gatePiece(px: Px, variant: number, stone: boolean, team: number): void {
   const t = TEAMS[team];
   const open = (variant & 1) !== 0;
   const locked = (variant & 4) !== 0;
-  px(1, 27, 14, 3, SH);
   const post = stone ? JP.stone : JP.woodD;
-  px(0, 10, 3, 18, post);
-  px(13, 10, 3, 18, post);
-  if (stone) {
-    px(0, 10, 3, 1, JP.stoneL);
-    px(13, 10, 3, 1, JP.stoneL);
-    roof3q(px, 8, 9, 4, 9, 4, 1, ROOF[team]);
-  } else {
-    px(-1, 7, 18, 2, JP.vermil);
-    px(0, 9, 16, 1, JP.vermilD);
-    px(1, 11, 14, 1, JP.woodD);
+  const postL = stone ? JP.stoneL : JP.woodL;
+  if ((variant & (2 | 32 | 64)) !== 0 && (variant & (8 | 16)) === 0) {
+    // running north-south: seen side-on, a heavy frame with the door set into it
+    px(3, 27, 10, 3, SH);
+    px(5, 6, 6, 22, post);
+    px(5, 6, 1, 22, postL);
+    if (stone) px(4, 4, 8, 3, ROOF[team].m);
+    else {
+      px(4, 4, 8, 2, JP.vermil);
+      px(4, 6, 8, 1, JP.vermilD);
+    }
+    px(6, 10, 4, 17, open ? '#241710' : stone ? JP.woodD : JP.woodL);
+    if (!open) px(6, 14, 4, 2, t.m);
+    if (locked) px(6, 19, 4, 2, JP.gold);
+    return;
   }
-  if (open) {
-    px(3, 12, 10, 16, '#241710');
-    px(3, 12, 2, 16, JP.woodL);
-    px(11, 12, 2, 16, JP.woodL);
+  const leftHalf = (variant & 8) !== 0; // the other half is to the east
+  const rightHalf = (variant & 16) !== 0;
+  px(leftHalf ? 1 : 0, 27, leftHalf || rightHalf ? 15 : 14, 3, SH);
+  // posts only on the gate's outer edges
+  if (!rightHalf) {
+    px(0, 10, 3, 18, post);
+    px(0, 10, 3, 1, postL);
+  }
+  if (!leftHalf) {
+    px(13, 10, 3, 18, post);
+    px(13, 10, 3, 1, postL);
+  }
+  // the beam (or roof) runs right across both halves
+  const bx0 = rightHalf ? 0 : -1;
+  const bx1 = leftHalf ? 16 : 17;
+  if (stone) {
+    px(bx0, 7, bx1 - bx0, 3, ROOF[team].m);
+    px(bx0, 6, bx1 - bx0, 1, ROOF[team].l);
+    px(bx0, 10, bx1 - bx0, 1, ROOF[team].dd);
   } else {
-    px(3, 12, 10, 16, stone ? JP.woodD : JP.woodL);
-    for (let x = 4; x < 13; x += 3) px(x, 12, 1, 16, stone ? '#2e1d14' : JP.wood);
-    px(7, 12, 2, 16, JP.ol);
-    px(4, 14, 3, 4, t.m);
-    px(9, 14, 3, 4, t.m);
-    if (stone) for (const [x, y] of [[4, 20], [10, 20], [4, 25], [10, 25]]) px(x, y, 1, 1, JP.blade);
+    px(bx0, 7, bx1 - bx0, 2, JP.vermil);
+    px(Math.max(0, bx0), 9, Math.min(16, bx1) - Math.max(0, bx0), 1, JP.vermilD);
+    px(rightHalf ? 0 : 1, 11, leftHalf ? 16 : rightHalf ? 15 : 14, 1, JP.woodD);
+  }
+  // the door leaf fills the rest of the tile
+  const d0 = rightHalf ? 0 : 3;
+  const d1 = leftHalf ? 16 : 13;
+  if (open) {
+    px(d0, 12, d1 - d0, 16, '#241710');
+    if (!rightHalf) px(3, 12, 2, 16, JP.woodL);
+    if (!leftHalf) px(11, 12, 2, 16, JP.woodL);
+  } else {
+    px(d0, 12, d1 - d0, 16, stone ? JP.woodD : JP.woodL);
+    for (let x = d0 + 1; x < d1; x += 3) px(x, 12, 1, 16, stone ? '#2e1d14' : JP.wood);
+    if (leftHalf) px(15, 12, 1, 16, JP.ol);
+    else if (rightHalf) px(0, 12, 1, 16, JP.ol);
+    else px(7, 12, 2, 16, JP.ol);
+    // a team crest on each leaf
+    px(leftHalf ? 8 : rightHalf ? 4 : 4, 14, 4, 4, t.m);
+    if (!leftHalf && !rightHalf) px(9, 14, 3, 4, t.m);
+    if (stone) for (let x = d0 + 2; x < d1 - 1; x += 5) for (const y of [20, 25]) px(x, y, 1, 1, JP.blade);
   }
   if (locked) {
-    px(3, 19, 10, 2, JP.blackL);
-    px(7, 18, 2, 4, JP.gold);
+    px(leftHalf ? 10 : 0, 19, leftHalf ? 6 : rightHalf ? 6 : 13, 2, JP.blackL);
+    if (leftHalf) px(14, 18, 2, 4, JP.gold);
+    else if (rightHalf) px(0, 18, 2, 4, JP.gold);
+    else px(7, 18, 2, 4, JP.gold);
   }
 }
 

@@ -658,6 +658,7 @@ export function iconFor(type: string, team = 0, tier = 0): HTMLCanvasElement {
   }
   if (type === 'fish') return fishSprite(3, 0);
   if (type === 'tree') return treeSprite(0);
+  if (type.startsWith('tree:')) return treeSprite(Number(type.slice(5)) || 0); // a particular tree: cherry, pine or bamboo
   if (type === 'berries') return berrySprite(6);
   if (type === 'sheep') return sheepSprite(0);
   return buildingSprite(type, team);

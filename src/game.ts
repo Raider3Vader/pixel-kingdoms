@@ -3,7 +3,7 @@
 import type { MatchResults } from './stats';
 import { Audio } from './audio';
 import { AGES, BUILDINGS, MAP, MARKET, RESOURCES, OPENINGS, RENDER, SIM, TOWER_UPGRADE, UNITS, costText, unitStats, type BuildingType, type Cost, type DifficultyKey, type ResKind, type UnitType, MUSIC_MOOD } from './config';
-import { buildingPos, buildTerrain, drawMinimap, drawWorld, Effects, type Camera, type Ghost } from './render/renderer';
+import { buildingPos, buildTerrain, drawMinimap, drawWorld, Effects, treeVariant, type Camera, type Ghost } from './render/renderer';
 import { buildingSprite, iconFor } from './render/sprites';
 import { createBot, updateBot, type Bot } from './sim/bot';
 import { createMatch, type MapKind } from './sim/map';
@@ -29,6 +29,10 @@ import {
   MAX_WALL,
   orderFormation,
   placeBuilding,
+  placeGate,
+  canPlaceGate,
+  gateVertical,
+  gateTiles,
   deleteOwn,
   placeWallLine,
   researchInfo,
@@ -73,9 +77,9 @@ const TIPS: Record<string, string> = {
   stable: 'Trains Cavalry and Scouts.',
   market: 'Trade earns gold over time. Buy food, wood and stone with gold, and hire merchants for more trade.',
   wall: 'Cheap wooden wall that keeps enemies out.',
-  gate: 'Wooden gate: your units walk through, enemies do not. Can be locked.',
+  gate: 'Wooden gate, two tiles wide: your units walk through, enemies do not. Can be locked. Place it on a wall to swap it in (you get the wall back); R turns it.',
   stoneWall: 'Strong stone wall.',
-  stoneGate: 'Strong stone gate: your units walk through, enemies do not. Can be locked.',
+  stoneGate: 'Strong stone gate, two tiles wide: your units walk through, enemies do not. Can be locked. Place it on a wall to swap it in (you get the wall back); R turns it.',
   watchTower: 'Sees far to warn you of attacks. Can be upgraded in the Feudal Age.',
   guardTower: 'Shoots arrows and holds 5 troops; each archer inside adds an arrow.',
   spearman: 'Cheap and deadly against horses. Weak to swords and arrows.',
@@ -390,7 +394,7 @@ export class Game {
 
   render(ctx: CanvasRenderingContext2D): void {
     const g1 = this.ghost();
-    const ghosts = g1 ? [g1] : this.wallGhosts();
+    const ghosts = g1 ? (g1.vertical !== undefined ? gateTiles(g1.tx, g1.ty, g1.vertical).map((t, i) => ({ ...g1, tx: t.x, ty: t.y, half: i })) : [g1]) : this.wallGhosts();
     const rallyFor = this.selected.length >= 1 && this.selected[0].kind === 'building' && this.selected[0].team === PLAYER ? this.selected[0] : null;
     drawWorld(ctx, this.world, this.terrain, this.cam, this.fx, {
       selected: new Set(this.selected.map((e) => e.id)),
@@ -423,10 +427,20 @@ export class Game {
     if (this.mode.kind !== 'place' || !this.mouse.onCanvas) return null;
     const p = this.toWorld(this.mouse.x, this.mouse.y);
     const size = BUILDINGS[this.mode.type].size;
+    if (BUILDINGS[this.mode.type].gate) {
+      // a gate is two tiles: the one under the mouse and the next one along the wall
+      const tx = Math.floor(p.x / T);
+      const ty = Math.floor(p.y / T);
+      const vertical = gateVertical(this.world, PLAYER, tx, ty) ?? this.gateTurned;
+      return { type: this.mode.type, tx, ty, vertical, ok: canPlaceGate(this.world, PLAYER, this.mode.type, tx, ty, vertical) === 'ok' };
+    }
     const tx = Math.round(p.x / T - size / 2);
     const ty = Math.round(p.y / T - size / 2);
     return { type: this.mode.type, tx, ty, ok: canPlace(this.world, PLAYER, this.mode.type, tx, ty) === 'ok' };
   }
+
+  /** R turns a gate that has no wall to follow (east-west or north-south). */
+  private gateTurned = false;
 
   /** Wall placement preview: the tile under the mouse, or the whole line once a start is set. */
   private wallGhosts(): Ghost[] {
@@ -453,6 +467,9 @@ export class Game {
   }
 
   private select(list: Entity[], sound = true): void {
+    // clicking either half of a gate selects the whole gate
+    const extra = list.map((e) => (e.partner ? this.world.get(e.partner) : undefined)).filter((p): p is Entity => !!p && !list.includes(p));
+    if (extra.length) list = [...list, ...new Set(extra)];
     this.selected = list;
     this.mode = { kind: 'none' };
     this.hudT = 0;
@@ -954,7 +971,7 @@ export class Game {
     if (!g) return;
     let builders = this.mySel().filter((u) => u.type === 'villager');
     if (g.type === 'farm' && keep && builders.length > 1) builders = this.paddyBuilder(builders, g.tx, g.ty);
-    const r = placeBuilding(this.world, PLAYER, g.type, g.tx, g.ty, builders);
+    const r = g.vertical !== undefined ? placeGate(this.world, PLAYER, g.type, g.tx, g.ty, g.vertical, builders) : placeBuilding(this.world, PLAYER, g.type, g.tx, g.ty, builders);
     if (r === 'ok') {
       if (!keep || !canAfford(this.world, PLAYER, BUILDINGS[g.type].cost)) this.mode = { kind: 'none' };
     } else {
@@ -1090,6 +1107,11 @@ export class Game {
     this.audio.unlock();
     if (k === 'escape') return; // handled in main.ts (pause / resume / cancel)
     if (this.paused || this.over) return;
+    if (k === 'r' && this.mode.kind === 'place' && BUILDINGS[this.mode.type].gate) {
+      this.gateTurned = !this.gateTurned;
+      this.audio.play('click');
+      return;
+    }
     if (k === 'delete' || k === 'backspace') {
       // Delete (on a Mac keyboard the key marked "delete" is Backspace) destroys what you have selected
       e.preventDefault();
@@ -1256,14 +1278,16 @@ export class Game {
       const e = sel[0];
       const head = document.createElement('div');
       head.className = 'sel-head';
-      head.appendChild(icon(e.type, e.team === NATURE ? 0 : e.team, 32, e.team < 2 ? w.teams[e.team].age : 0));
+      head.appendChild(icon(e.type === 'tree' ? `tree:${treeVariant(e.id)}` : e.type, e.team === NATURE ? 0 : e.team, 32, e.team < 2 ? w.teams[e.team].age : 0));
       const col = document.createElement('div');
       head.appendChild(col);
       info.appendChild(head);
       const owner = e.team === ENEMY ? ' (enemy)' : '';
       if (e.kind === 'resource') {
         const r = RESOURCES[e.type as keyof typeof RESOURCES];
-        col.innerHTML = `<div class="sel-name">${r.name}</div><div>${Math.ceil(e.amount)} ${r.kind} left</div>`;
+        const v = e.type === 'tree' ? treeVariant(e.id) : -1;
+        const name = v < 0 ? r.name : v <= 1 ? 'Cherry tree' : v === 2 ? 'Pine' : 'Bamboo';
+        col.innerHTML = `<div class="sel-name">${name}</div><div>${Math.ceil(e.amount)} ${r.kind} left</div>`;
         return;
       }
       if (e.kind === 'unit') {
