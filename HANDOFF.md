@@ -1,6 +1,6 @@
 # Pixel Kingdoms: handoff
 
-Read this first in a new chat. Last updated 2026-11-22, version **0.11.3**.
+Read this first in a new chat. Last updated 2026-11-22, version **0.12.0**.
 
 ## 1. Where everything is
 
@@ -24,7 +24,7 @@ Read this first in a new chat. Last updated 2026-11-22, version **0.11.3**.
 - **Keep Classic hidden.** Its art is still in `src/render/sprites.ts`, but `setTheme` always forces `sakura`, and the Theme menu option was removed on request.
 - Test UI changes in the browser at a desktop size and at a small or zoomed-in size (about 600 x 336). The owner's browser is zoomed to about 165%.
 
-## 3. What the game has (0.11.3)
+## 3. What the game has (0.12.0)
 
 - **Screens:** a title screen (a villager chased by a rider), a menu (difficulty, map: Rivers or Inland Sea, Controls, Open changelog, Sound, Music, Full screen), pause and an end screen with a stats table and graphs (army, villagers, resources over time; `src/stats.ts`, data from `World.history`, a snapshot every 10 s).
 - **Music:** made live in `src/audio.ts` (`Music`, `TRACKS`): a calm loop (D yo scale, koto, drone, flute) and a battle loop (E in scale, taiko). `Game.updateMood()` switches to battle after `MUSIC_MOOD` hits nearby and back to calm after a quiet spell. The game fills the whole window at a whole-number pixel scale.
@@ -49,7 +49,7 @@ Read this first in a new chat. Last updated 2026-11-22, version **0.11.3**.
 - **Buildings:**
   - Town Center, House, Rice paddy, Storehouse, Barracks.
   - Stable and Market (Feudal).
-  - Pagoda (Imperial): trains Samurai. Dock: must touch water (`canPlace` returns 'shore' otherwise); trains boats, and fishing boats drop their catch there.
+  - Pagoda (Imperial, 300W 200S 100G, 1200 hp, one per player via `limit`): trains Samurai and researches Way of the Warrior (`WAY_OF_WARRIOR`, research key `warrior`, `team.wayOfWarrior`; `unitStats(type, age, warrior)` adds +20 hp, +1/+1 armor to Samurai). The AI studies it after 3 Samurai. Dock: must touch water (`canPlace` returns 'shore' otherwise); trains boats, and fishing boats drop their catch there.
   - Wooden walls and gates; stone walls and gates (Feudal). Gates let only their own side through, and Z locks them.
   - Watch tower (sight 11). Guard tower (Feudal, or upgrade a watch tower): holds 5 troops, and each archer inside adds an arrow.
   - Villagers repair damaged buildings for 25% of the build cost.
@@ -91,7 +91,7 @@ Read this first in a new chat. Last updated 2026-11-22, version **0.11.3**.
 
 ## 5. Tools and tests
 
-- `npm test` runs 66 tests: economy, every combat matchup, ages, the market, gates, towers, repair, paddies, formations, queued orders, every river layout (mirrored and connected), and AI games including Hard beating Easy.
+- `npm test` runs 68 tests: economy, every combat matchup, ages, the market, gates, towers, repair, paddies, formations, queued orders, every river layout (mirrored and connected), and AI games including Hard beating Easy.
 - `npm run balance` plays every opening against every other (32 games, takes several minutes). The last run was fairly even, with games of about 11 to 22 minutes.
 - `npx tsx scripts/mappng.ts out.png 5 5:twin 5:sea` renders map overviews (`seed`, `seed:riverKind` or `seed:sea`). `scripts/showmap.ts` prints a map as text. `scripts/simulate.ts` traces one AI.
 - In the browser console, `pk()` returns the live Game. The built-in browser pane runs at about 1.5 fps when hidden, so drive time with `pk().update(1/60)` loops.

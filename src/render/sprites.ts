@@ -644,6 +644,18 @@ export function iconFor(type: string, team = 0, tier = 0): HTMLCanvasElement {
     });
   }
   if (['villager', 'swordsman', 'spearman', 'archer', 'cavalry', 'scout', 'samurai', 'fishingBoat', 'warBoat', 'transportBoat'].includes(type)) return unitSprite(type, team, 'idle', 0, type === 'transportBoat' ? '4' : '', tier);
+  if (type === 'warrior') {
+    // Way of the Warrior: a katana across a red rising sun
+    return make('icon:warrior', 16, 16, (px) => {
+      disc(px, 8, 8, 6, PAL.red);
+      disc(px, 8, 8, 4.5, '#ef7d57');
+      for (let i = 0; i < 10; i++) px(3 + i, 12 - i, 1, 1, PAL.white);
+      for (let i = 0; i < 9; i++) px(4 + i, 12 - i, 1, 1, PAL.silver);
+      px(1, 13, 3, 1, PAL.yellow);
+      px(2, 12, 1, 3, PAL.yellow);
+      px(0, 14, 2, 2, PAL.trunk);
+    });
+  }
   if (type === 'repair') {
     // a carpenter's mallet
     return make('icon:repair', 16, 16, (px) => {

@@ -8,6 +8,7 @@ import {
   OPENINGS,
   RESOURCES,
   UNITS,
+  WAY_OF_WARRIOR,
   type BuildingType,
   type Cost,
   type Difficulty,
@@ -313,8 +314,14 @@ function military(w: World, bot: Bot): void {
   const mix = bot.attacksSent === 0 ? bot.opening.mix : bot.opening.mixAfter;
   const soldiers = w.units.filter((u) => !u.dead && u.team === bot.team && isSoldier(u) && !isNaval(u) && u.type !== 'scout');
   const trainers = w.buildings.filter((b) => !b.dead && b.team === bot.team && b.progress >= 1 && (b.type === 'barracks' || b.type === 'stable' || b.type === 'pagoda'));
+  // with a few Samurai out, study the Way of the Warrior before training more
+  const pagoda = trainers.find((b) => b.type === 'pagoda');
+  const samurai = soldiers.filter((u) => u.type === 'samurai').length;
+  const study = !!pagoda && !team.wayOfWarrior && samurai >= 3;
+  if (pagoda && study && !pagoda.research && pagoda.queue.length === 0 && startResearch(w, pagoda, 'warrior') === 'cost') bot.reserve = WAY_OF_WARRIOR.cost;
   for (const b of trainers) {
     if (b.queue.length >= 2) continue;
+    if (b === pagoda && (study || b.research)) continue;
     const canTrain = BUILDINGS[b.type as BuildingType].trains;
     // pick the unit type furthest below its share of the mix
     const counts: Record<string, number> = {};

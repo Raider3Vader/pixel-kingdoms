@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { AGES, BUILDINGS, ECONOMY, SIM, UNITS, hitDamage, type Age, type UnitType } from '../config';
+import { AGES, BUILDINGS, ECONOMY, SIM, UNITS, WAY_OF_WARRIOR, hitDamage, type Age, type UnitType } from '../config';
 import { createBot, updateBot } from './bot';
 import { RIVERS, createMatch, type RiverKind } from './map';
 import { findPath } from './path';
@@ -795,4 +795,39 @@ describe('AI sea landings', () => {
     }
     expect(checked).toBe(true);
   }, 240_000);
+});
+
+describe('the Pagoda as a landmark', () => {
+  it('costs more, is very tough, and you may only have one', () => {
+    const w = testWorld();
+    const t = w.teams[PLAYER];
+    t.age = 2;
+    t.wood = t.stone = t.gold = 2000;
+    expect(BUILDINGS.pagoda.hp).toBeGreaterThanOrEqual(1200);
+    expect(placeBuilding(w, PLAYER, 'pagoda', 20, 20, [], false)).toBe('ok');
+    expect(t.wood).toBe(2000 - BUILDINGS.pagoda.cost.wood!);
+    expect(t.gold).toBe(2000 - BUILDINGS.pagoda.cost.gold!);
+    expect(canPlace(w, PLAYER, 'pagoda', 30, 30, false)).toBe('limit');
+  });
+
+  it('Way of the Warrior makes every Samurai tougher, now and later', () => {
+    const w = testWorld();
+    const t = w.teams[PLAYER];
+    t.age = w.teams[ENEMY].age = 2;
+    t.food = t.gold = 1000;
+    const p = spawnBuilding(w, 'pagoda', PLAYER, 20, 20, true);
+    const old = spawnUnit(w, 'samurai', PLAYER, 26 * T, 20 * T);
+    const before = old.maxHp;
+    const hitBefore = hitDamage('swordsman', 2, 'samurai', 2, false, false, false);
+    expect(startResearch(w, p, 'warrior')).toBe('ok');
+    expect(t.food).toBe(1000 - WAY_OF_WARRIOR.cost.food!);
+    expect(train(w, p, 'samurai')).toBe('busy'); // the Pagoda studies instead of training
+    run(w, WAY_OF_WARRIOR.sec + 1);
+    expect(t.wayOfWarrior).toBe(true);
+    expect(old.maxHp).toBe(before + WAY_OF_WARRIOR.hp);
+    const fresh = spawnUnit(w, 'samurai', PLAYER, 27 * T, 20 * T);
+    expect(fresh.maxHp).toBe(before + WAY_OF_WARRIOR.hp);
+    expect(hitDamage('swordsman', 2, 'samurai', 2, false, false, true)).toBeLessThan(hitBefore);
+    expect(startResearch(w, p, 'warrior')).toBe('cannot'); // only once
+  });
 });

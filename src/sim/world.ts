@@ -13,6 +13,7 @@ import {
   RES_KINDS,
   SIM,
   TOWER_UPGRADE,
+  WAY_OF_WARRIOR,
   UNITS,
   hitDamage,
   unitStats,
@@ -85,7 +86,7 @@ export interface Entity {
   locked: boolean; // gates: closed to everyone
   partner: number; // gates: the other half of a two-tile gate, or 0
   noReplant: boolean; // rice paddies: don't replant when it runs dry
-  research: { key: 'age' | 'merchant' | 'towerUpgrade'; t: number; sec: number } | null;
+  research: { key: ResearchKey; t: number; sec: number } | null;
   repairDebt: Cost; // fractional repair costs not yet paid
   speedCap: number; // tiles/s; > 0 while marching in formation
   seen: boolean; // has the player ever seen it
@@ -123,6 +124,7 @@ export interface TeamState {
   stone: number;
   age: Age;
   merchants: number;
+  wayOfWarrior: boolean; // the Pagoda's upgrade for Samurai
   popCap: number;
   popUsed: number;
   stats: TeamStats;
@@ -182,6 +184,7 @@ export class World {
         stone: ECONOMY.startingStone,
         age: 0,
         merchants: 0,
+        wayOfWarrior: false,
         popCap: 0,
         popUsed: 0,
         stats: { gathered: 0, trained: 0, killed: 0, lost: 0, razed: 0, built: 0, byKind: { food: 0, wood: 0, gold: 0, stone: 0 }, agedAt: [], peakArmy: 0 },
@@ -272,7 +275,7 @@ function blank(w: World, kind: Kind, type: string, team: number, x: number, y: n
 }
 
 export function spawnUnit(w: World, type: UnitType, team: number, x: number, y: number): Entity {
-  const e = blank(w, 'unit', type, team, x, y, unitStats(type, w.teams[team]?.age ?? 0).hp);
+  const e = blank(w, 'unit', type, team, x, y, unitStats(type, w.teams[team]?.age ?? 0, w.teams[team]?.wayOfWarrior).hp);
   e.hostile = type !== 'villager' && type !== 'scout' && type !== 'fishingBoat' && type !== 'transportBoat';
   w.ents.set(e.id, e);
   w.units.push(e);
@@ -508,11 +511,12 @@ export function shortOf(w: World, team: number, cost: Cost): ResKind | null {
   return RES_KINDS.find((k) => t[k] < (cost[k] ?? 0)) ?? null;
 }
 
-export type PlaceResult = 'ok' | 'blocked' | 'unexplored' | 'cost' | 'age' | 'shore';
+export type PlaceResult = 'ok' | 'blocked' | 'unexplored' | 'cost' | 'age' | 'shore' | 'limit';
 
 export function canPlace(w: World, team: number, type: BuildingType, tx: number, ty: number, requireExplored = true): PlaceResult {
   const s = BUILDINGS[type];
   if (team < 2 && w.teams[team].age < s.age) return 'age';
+  if (s.limit && w.buildings.filter((b) => !b.dead && b.team === team && b.type === type).length >= s.limit) return 'limit';
   for (let y = ty; y < ty + s.size; y++) {
     for (let x = tx; x < tx + s.size; x++) {
       if (x < 1 || y < 1 || x >= w.w - 1 || y >= w.h - 1) return 'blocked';
@@ -765,7 +769,7 @@ export function cancelTrain(w: World, building: Entity, index: number): void {
   refund(w, building.team, UNITS[type].cost);
 }
 
-export type ResearchKey = 'age' | 'merchant' | 'towerUpgrade';
+export type ResearchKey = 'age' | 'merchant' | 'towerUpgrade' | 'warrior';
 
 /** What a research costs and how long it takes, or null if it can't be done here now. */
 export function researchInfo(w: World, b: Entity, key: ResearchKey): { cost: Cost; sec: number; name: string } | null {
@@ -778,6 +782,10 @@ export function researchInfo(w: World, b: Entity, key: ResearchKey): { cost: Cos
   if (key === 'merchant') {
     if (b.type !== 'market' || team.merchants >= MARKET.maxMerchants) return null;
     return { cost: MARKET.merchantCost, sec: MARKET.merchantSec, name: 'Hire a merchant' };
+  }
+  if (key === 'warrior') {
+    if (b.type !== 'pagoda' || team.wayOfWarrior) return null;
+    return { cost: WAY_OF_WARRIOR.cost, sec: WAY_OF_WARRIOR.sec, name: 'Way of the Warrior' };
   }
   if (b.type !== 'watchTower' || team.age < 1) return null;
   return { cost: TOWER_UPGRADE.cost, sec: TOWER_UPGRADE.sec, name: 'Upgrade to a guard tower' };
@@ -813,7 +821,7 @@ function finishResearch(w: World, b: Entity): void {
     // every unit of the team upgrades on the spot
     for (const u of w.units) {
       if (u.team !== b.team || u.dead) continue;
-      const max = unitStats(u.type as UnitType, team.age).hp;
+      const max = unitStats(u.type as UnitType, team.age, team.wayOfWarrior).hp;
       u.hp = (u.hp / u.maxHp) * max;
       u.maxHp = max;
     }
@@ -821,6 +829,14 @@ function finishResearch(w: World, b: Entity): void {
     w.emit({ t: 'aged', team: b.team, age: team.age });
   } else if (key === 'merchant') {
     team.merchants++;
+  } else if (key === 'warrior') {
+    team.wayOfWarrior = true;
+    // Samurai already out in the field get tougher too
+    for (const u of w.units) {
+      if (u.team !== b.team || u.dead || u.type !== 'samurai') continue;
+      u.maxHp += WAY_OF_WARRIOR.hp;
+      u.hp += WAY_OF_WARRIOR.hp;
+    }
   } else {
     const was = b.maxHp;
     b.type = 'guardTower';
@@ -1211,7 +1227,7 @@ function approach(w: World, u: Entity, e: Entity, reach: number, dt: number): 't
 // ---------- unit behaviour ----------
 
 function statsOf(w: World, u: Entity): ReturnType<typeof unitStats> {
-  return unitStats(u.type as UnitType, (w.teams[u.team]?.age ?? 0) as Age);
+  return unitStats(u.type as UnitType, (w.teams[u.team]?.age ?? 0) as Age, w.teams[u.team]?.wayOfWarrior);
 }
 
 function reachFor(w: World, u: Entity): number {
@@ -1344,7 +1360,7 @@ function attackStep(w: World, u: Entity, dt: number): void {
       if (tgt.kind === 'unit') {
         // archers in close quarters do less; armor soaks up part of every hit
         const close = st.rangeTiles > 0 && Math.hypot(tgt.x - u.x, tgt.y - u.y) < CLOSE_QUARTERS.tiles * T;
-        dmg = hitDamage(u.type as UnitType, w.teams[u.team].age, tgt.type as UnitType, w.teams[tgt.team].age, close);
+        dmg = hitDamage(u.type as UnitType, w.teams[u.team].age, tgt.type as UnitType, w.teams[tgt.team].age, close, w.teams[u.team].wayOfWarrior, w.teams[tgt.team]?.wayOfWarrior);
       } else dmg = st.attack * st.vsBuildings;
       w.emit({ t: 'hit', x: tgt.x, y: tgt.y, team: u.team, ranged: st.rangeTiles > 0, fx: u.x, fy: u.y - 6 });
       damage(w, u, tgt, dmg);
@@ -1980,7 +1996,7 @@ function updateBuilding(w: World, b: Entity, dt: number): void {
       if (best) {
         b.cooldown = s.attackSec;
         const arrows = 1 + (s.garrison > 0 ? garrisoned(w, b).filter((u) => u.type === 'archer').length : 0);
-        const armor = unitStats(best.type as UnitType, w.teams[best.team].age).arrowArmor;
+        const armor = unitStats(best.type as UnitType, w.teams[best.team].age, w.teams[best.team].wayOfWarrior).arrowArmor;
         const top = b.y - (s.garrison > 0 ? 30 : 10);
         for (let a = 0; a < arrows && !best.dead; a++) {
           w.emit({ t: 'hit', x: best.x + (a - (arrows - 1) / 2) * 3, y: best.y, team: b.team, ranged: true, fx: b.x, fy: top });

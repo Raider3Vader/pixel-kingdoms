@@ -9,6 +9,16 @@ export interface ChangelogEntry {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    version: '0.12.0',
+    date: '2026-11-23',
+    title: 'The Pagoda as a landmark',
+    items: [
+      'The Pagoda is a landmark now: 300 wood, 200 stone and 100 gold, 1200 hp, and only one per player.',
+      'New upgrade at the Pagoda: Way of the Warrior (200 food, 200 gold). Every Samurai, now and later, gets +20 hp and +1 armor against blades and arrows. The Pagoda pauses training while it studies.',
+      'The enemy studies it too once it has a few Samurai.',
+    ],
+  },
+  {
     version: '0.11.3',
     date: '2026-11-23',
     title: 'Easier building, wide gates',

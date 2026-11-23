@@ -99,6 +99,7 @@ export interface BuildingStats {
   walkable?: boolean; // units walk over it (rice paddies)
   wall?: boolean; // one-tile wall piece
   gate?: boolean; // lets its own side through unless locked
+  limit?: number; // most a player may have (counting ones still being built)
 }
 
 const B = (o: Partial<BuildingStats> & Pick<BuildingStats, 'name' | 'cost' | 'buildSec' | 'size' | 'hp'>): BuildingStats => ({
@@ -128,7 +129,8 @@ export const BUILDINGS: Record<BuildingType, BuildingStats> = {
   stoneGate: B({ name: 'Stone gate', cost: { stone: 30 }, age: 1, buildSec: 15, size: 1, hp: 900, sight: 3, wall: true, gate: true }),
   watchTower: B({ name: 'Watch tower', cost: { wood: 60 }, buildSec: 25, size: 1, hp: 250, sight: 11 }),
   guardTower: B({ name: 'Guard tower', cost: { wood: 50, stone: 125 }, age: 1, buildSec: 45, size: 1, hp: 700, sight: 10, attack: 5, attackSec: 1.5, rangeTiles: 7, garrison: 5 }),
-  pagoda: B({ name: 'Pagoda', cost: { wood: 175, stone: 100 }, age: 2, buildSec: 50, size: 2, hp: 500, sight: 6, trains: ['samurai'] }),
+  // a landmark: one per player, costly, and very hard to bring down
+  pagoda: B({ name: 'Pagoda', cost: { wood: 300, stone: 200, gold: 100 }, age: 2, buildSec: 80, size: 2, hp: 1200, sight: 7, trains: ['samurai'], limit: 1 }),
   // built on the shore; boats are trained here and fishing boats bring their catch back to it
   dock: B({ name: 'Dock', cost: { wood: 120 }, buildSec: 35, size: 2, hp: 300, sight: 6, trains: ['fishingBoat', 'warBoat', 'transportBoat'] }),
 };
@@ -330,16 +332,26 @@ UNITS.transportBoat = {
 export const CLOSE_QUARTERS = { tiles: 1.2, share: 0.5 };
 
 /** A unit's stats in a given age. */
-export function unitStats(type: UnitType, age: Age): UnitStats & Tier {
+/** Way of the Warrior, the Pagoda's upgrade: every Samurai gets this much more. */
+export const WAY_OF_WARRIOR = { cost: { food: 200, gold: 200 } as Cost, sec: 45, hp: 20, armor: 1, arrowArmor: 1 };
+
+/** A unit's stats in an age; `warrior` is true once the team has Way of the Warrior. */
+export function unitStats(type: UnitType, age: Age, warrior = false): UnitStats & Tier {
   const u = UNITS[type];
   const t = u.tiers[Math.max(age, u.age)];
-  return { ...u, ...t, rangeTiles: t.rangeTiles ?? u.rangeTiles };
+  const s = { ...u, ...t, rangeTiles: t.rangeTiles ?? u.rangeTiles };
+  if (warrior && type === 'samurai') {
+    s.hp += WAY_OF_WARRIOR.hp;
+    s.armor += WAY_OF_WARRIOR.armor;
+    s.arrowArmor += WAY_OF_WARRIOR.arrowArmor;
+  }
+  return s;
 }
 
 /** Damage one hit does: bonus, close-quarters penalty for archers, then armor (at least 1). */
-export function hitDamage(att: UnitType, attAge: Age, def: UnitType, defAge: Age, closeQuarters: boolean): number {
-  const a = unitStats(att, attAge);
-  const d = unitStats(def, defAge);
+export function hitDamage(att: UnitType, attAge: Age, def: UnitType, defAge: Age, closeQuarters: boolean, attWarrior = false, defWarrior = false): number {
+  const a = unitStats(att, attAge, attWarrior);
+  const d = unitStats(def, defAge, defWarrior);
   const ranged = a.rangeTiles > 0;
   let dmg = a.attack + (a.bonus[def] ?? 0) * (a.bonusScale ?? 1);
   if (ranged && closeQuarters) dmg *= CLOSE_QUARTERS.share;

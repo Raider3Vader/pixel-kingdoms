@@ -2,7 +2,7 @@
 
 import type { MatchResults } from './stats';
 import { Audio } from './audio';
-import { AGES, BUILDINGS, MAP, MARKET, RESOURCES, OPENINGS, RENDER, SIM, TOWER_UPGRADE, UNITS, costText, unitStats, type BuildingType, type Cost, type DifficultyKey, type ResKind, type UnitType, MUSIC_MOOD } from './config';
+import { AGES, BUILDINGS, MAP, MARKET, RESOURCES, OPENINGS, RENDER, SIM, TOWER_UPGRADE, UNITS, WAY_OF_WARRIOR, costText, unitStats, type BuildingType, type Cost, type DifficultyKey, type ResKind, type UnitType, MUSIC_MOOD } from './config';
 import { buildingPos, buildTerrain, drawMinimap, drawWorld, Effects, treeVariant, type Camera, type Ghost } from './render/renderer';
 import { buildingSprite, iconFor } from './render/sprites';
 import { createBot, updateBot, type Bot } from './sim/bot';
@@ -90,7 +90,7 @@ const TIPS: Record<string, string> = {
   archer: 'Good against most things from range. Weak up close and against heavy armor.',
   cavalry: 'Fast and a bit stronger than swordsmen. Runs down archers. Fears spears.',
   scout: 'Very fast and sees far. Weak arrows from 3 tiles. Explores without picking fights.',
-  pagoda: 'A five-storey pagoda where Samurai train. Imperial Age.',
+  pagoda: 'A five-storey landmark where Samurai train, and where they learn the Way of the Warrior. Imperial Age; only one each.',
   dock: 'Build it on the shore. Trains fishing boats and war boats; fishing boats bring their catch here.',
   samurai: 'Elite swordsman of the Imperial Age: quick, heavy blows that cut down swordsmen, spearmen and archers. Costs gold.',
   fishingBoat: 'Catches fish out on the water and brings it back to a Dock. Cannot fight.',
@@ -346,7 +346,7 @@ export class Game {
         case 'researched':
           if (ev.team === PLAYER && ev.key !== 'age') {
             this.audio.play('built');
-            this.toast(ev.key === 'merchant' ? 'A merchant joins your market.' : 'Guard tower ready.');
+            this.toast(ev.key === 'merchant' ? 'A merchant joins your market.' : ev.key === 'warrior' ? 'Way of the Warrior: your Samurai are tougher.' : 'Guard tower ready.');
           }
           break;
         case 'cantRepair':
@@ -685,6 +685,22 @@ export class Game {
           cancels: true,
           tip: `Advance to the ${next.name} (${next.sec} s). ${team.age === 0 ? 'Unlocks Archers, the Stable, the Market, stone walls and guard towers. Soldiers get stronger.' : 'Champions, Halberdiers, Longbowmen and Knights.'}`,
           run: () => this.research(ready[0], 'age'),
+        });
+      }
+      if (type === 'pagoda') {
+        const done = team.wayOfWarrior;
+        const going = ready.some((b) => b.research?.key === 'warrior');
+        out.push({
+          key: keys[k0],
+          icon: 'warrior',
+          label: 'Way of the Warrior',
+          status: done ? 'done' : undefined,
+          cost: done ? undefined : WAY_OF_WARRIOR.cost,
+          enabled: !done && !going && !ready.some((b) => b.research || b.queue.length) && canAfford(w, PLAYER, WAY_OF_WARRIOR.cost),
+          active: going || done,
+          cancels: going,
+          tip: done ? 'Learned: every Samurai has +20 hp and +1 armor against blades and arrows.' : `Train your Samurai in the way of the warrior: every Samurai, now and later, gets +${WAY_OF_WARRIOR.hp} hp and +1 armor against blades and arrows. Takes ${WAY_OF_WARRIOR.sec} s; the Pagoda cannot train while it studies.`,
+          run: () => (done ? this.audio.play('error') : this.research(ready[0], 'warrior')),
         });
       }
       if (type === 'market') {
@@ -1041,7 +1057,7 @@ export class Game {
     } else {
       this.audio.play('error');
       const c = BUILDINGS[g.type].cost;
-      this.toast(r === 'cost' ? `Not enough ${shortOf(this.world, PLAYER, c)} (${costText(c)}).` : r === 'unexplored' ? 'You cannot build in unexplored land.' : r === 'age' ? 'Not available in this age.' : r === 'shore' ? 'Docks must be built on the shore, touching water.' : 'Cannot build there.');
+      this.toast(r === 'cost' ? `Not enough ${shortOf(this.world, PLAYER, c)} (${costText(c)}).` : r === 'unexplored' ? 'You cannot build in unexplored land.' : r === 'age' ? 'Not available in this age.' : r === 'shore' ? 'Docks must be built on the shore, touching water.' : r === 'limit' ? 'You can only have one Pagoda.' : 'Cannot build there.');
     }
   }
 
@@ -1339,7 +1355,7 @@ export class Game {
             n.textContent = String(v);
             cost.appendChild(n);
           }
-        } else if (c.size !== 'narrow' && c.size !== 'icon') cost.textContent = cancel ? 'Cancel' : c.locked ? 'Locked' : c.status ? `${c.label} ${c.status}` : c.cost && Object.keys(c.cost).length ? shortCost(c.cost) : c.label;
+        } else if (c.size !== 'narrow' && c.size !== 'icon') cost.textContent = cancel ? 'Cancel' : c.locked ? 'Locked' : c.status === 'done' ? 'Done' : c.status ? `${c.label} ${c.status}` : c.cost && Object.keys(c.cost).length ? shortCost(c.cost) : c.label;
         b.appendChild(cost);
         box.appendChild(b);
       });
@@ -1370,7 +1386,7 @@ export class Game {
         return;
       }
       if (e.kind === 'unit') {
-        const s = unitStats(e.type as UnitType, w.teams[e.team].age);
+        const s = unitStats(e.type as UnitType, w.teams[e.team].age, w.teams[e.team].wayOfWarrior);
         // short names, grouped by size, so the line stays short: e.g. +3 vs swords/spears/archers
         const SHORT: Partial<Record<UnitType, string>> = { villager: 'villagers', swordsman: 'swords', spearman: 'spears', archer: 'archers', cavalry: 'cavalry', scout: 'scouts', samurai: 'samurai', fishingBoat: 'fishers', warBoat: 'warships', transportBoat: 'transports' };
         const groups = new Map<number, string[]>();
@@ -1409,7 +1425,7 @@ export class Game {
       if (e.research) {
         const info2 = researchInfo(w, e, e.research.key);
         const key = e.research.key;
-        const label = key === 'age' ? (info2?.name ?? 'Advancing').replace('Advance to the ', 'To ') : key === 'merchant' ? 'Merchant' : 'Guard tower';
+        const label = key === 'age' ? (info2?.name ?? 'Advancing').replace('Advance to the ', 'To ') : key === 'merchant' ? 'Merchant' : key === 'warrior' ? 'Way of Warrior' : 'Guard tower';
         const pct = e.research.t / e.research.sec;
         // like a training queue: the box with its picture cancels it when clicked
         const q = document.createElement('div');
@@ -1417,7 +1433,7 @@ export class Game {
         const b = document.createElement('button');
         b.dataset.r = '1';
         b.title = 'Click to cancel';
-        b.appendChild(icon(key === 'age' ? (w.teams[PLAYER].age === 0 ? 'age-feudal' : 'age-imperial') : key === 'merchant' ? 'merchant' : 'guardTower', PLAYER, 16, w.teams[PLAYER].age));
+        b.appendChild(icon(key === 'age' ? (w.teams[PLAYER].age === 0 ? 'age-feudal' : 'age-imperial') : key === 'merchant' ? 'merchant' : key === 'warrior' ? 'warrior' : 'guardTower', PLAYER, 16, w.teams[PLAYER].age));
         q.appendChild(b);
         const txt = document.createElement('div');
         txt.innerHTML = `<div>${label} ${Math.floor(pct * 100)}%</div><div class="bar prog"><i style="width:${pct * 100}%"></i></div>`;
