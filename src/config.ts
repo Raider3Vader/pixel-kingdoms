@@ -380,10 +380,10 @@ export interface Difficulty {
   counters: boolean; // shifts its army toward units that beat yours
 }
 export const DIFFICULTY: Record<DifficultyKey, Difficulty> = {
-  easy: { name: 'Easy', decideSec: 4, villagerTarget: 15, mistakeChance: 0.35, reactSec: 12, armyScale: 0.75, firstAttackSec: 420, speed: 1, extraTrainers: 0, counters: false },
-  normal: { name: 'Normal', decideSec: 2, villagerTarget: 22, mistakeChance: 0.1, reactSec: 6, armyScale: 1, firstAttackSec: 300, speed: 1, extraTrainers: 0, counters: false },
-  hard: { name: 'Hard', decideSec: 0.5, villagerTarget: 30, mistakeChance: 0, reactSec: 1, armyScale: 1.25, firstAttackSec: 0, speed: 1, extraTrainers: 0, counters: false },
-  impossible: { name: 'Impossible', decideSec: 0.25, villagerTarget: 40, mistakeChance: 0, reactSec: 0, armyScale: 1.5, firstAttackSec: 0, speed: 1.4, extraTrainers: 2, counters: true },
+  easy: { name: 'Hannah Mode', decideSec: 4, villagerTarget: 15, mistakeChance: 0.35, reactSec: 12, armyScale: 0.75, firstAttackSec: 420, speed: 1, extraTrainers: 0, counters: false },
+  normal: { name: 'Zach Mode', decideSec: 2, villagerTarget: 22, mistakeChance: 0.1, reactSec: 6, armyScale: 1, firstAttackSec: 300, speed: 1, extraTrainers: 0, counters: false },
+  hard: { name: 'Jordan Mode', decideSec: 0.5, villagerTarget: 30, mistakeChance: 0, reactSec: 1, armyScale: 1.25, firstAttackSec: 0, speed: 1, extraTrainers: 0, counters: false },
+  impossible: { name: 'Hudson Mode', decideSec: 0.25, villagerTarget: 40, mistakeChance: 0, reactSec: 0, armyScale: 1.5, firstAttackSec: 0, speed: 1.4, extraTrainers: 2, counters: true },
 };
 
 export type OpeningKey = 'boom' | 'rush' | 'archers' | 'horseRaid' | 'fastImperial' | 'fortress' | 'swarm';

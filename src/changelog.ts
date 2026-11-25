@@ -9,6 +9,14 @@ export interface ChangelogEntry {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    version: '0.13.1',
+    date: '2026-11-25',
+    title: 'New names for the difficulties',
+    items: [
+      'For now the difficulties have new names: Hannah Mode (Easy), Zach Mode (Normal), Jordan Mode (Hard) and Hudson Mode (Impossible).',
+    ],
+  },
+  {
     version: '0.13.0',
     date: '2026-11-25',
     title: 'Impossible mode and new enemy plans',

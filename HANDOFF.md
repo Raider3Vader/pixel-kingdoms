@@ -1,6 +1,6 @@
 # Pixel Kingdoms: handoff
 
-Read this first in a new chat. Last updated 2026-11-25, version **0.13.0**.
+Read this first in a new chat. Last updated 2026-11-25, version **0.13.1**.
 
 ## 1. Where everything is
 
@@ -68,7 +68,7 @@ Read this first in a new chat. Last updated 2026-11-25, version **0.13.0**.
   - Forest belts with 2 or 3 narrow gaps work as choke points. There are dense woods and open meadows.
   - Gold and stone sit near each village, with more in the middle.
   - Five river layouts are picked per match: twin streams (favored, about 40%), winding, meandering, central lake, and a wide river with fords.
-- **Enemy AI:** seven hidden openings (Boom, Rush, Archer line, Horse raid, Fast Imperial, Fortress, Swarm) and four difficulties (Easy, Normal, Hard, Impossible). Only Impossible bends the rules: `team.speed` (1.4) speeds up its gathering, training and research. It also gets `extraTrainers` (more Barracks and Stables) and `counters` (`armyMix` shifts training toward `COUNTER` of the player's army). Openings can set `maxBarracks` and `lateMixAge` (switch to `mixAfter` on reaching that age). Archers garrison guard towers that are raided and come out after. Houses are placed further out once the town fills up, attack size is capped (`MAX_ATTACK`), and at full population it attacks with what it has, at most every 30 s.
+- **Enemy AI:** seven hidden openings (Boom, Rush, Archer line, Horse raid, Fast Imperial, Fortress, Swarm) and four difficulties (Easy, Normal, Hard, Impossible). **Temporary names (0.13.1, the owner's request):** the menu and `DIFFICULTY[].name` show Hannah Mode, Zach Mode, Jordan Mode and Hudson Mode. The code keys are unchanged, so to undo it, change the four names in `config.ts` and the buttons in `index.html` back. Only Impossible bends the rules: `team.speed` (1.4) speeds up its gathering, training and research. It also gets `extraTrainers` (more Barracks and Stables) and `counters` (`armyMix` shifts training toward `COUNTER` of the player's army). Openings can set `maxBarracks` and `lateMixAge` (switch to `mixAfter` on reaching that age). Archers garrison guard towers that are raided and come out after. Houses are placed further out once the town fills up, attack size is capped (`MAX_ATTACK`), and at full population it attacks with what it has, at most every 30 s.
   - It advances ages, mines gold and stone, plants paddies, moves workers between resources and builds guard towers.
   - Its soldiers break through walls when blocked.
   - Difficulty changes how fast it decides and how many mistakes it makes; it never gets extra resources.
