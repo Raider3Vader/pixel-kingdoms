@@ -9,6 +9,17 @@ export interface ChangelogEntry {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    version: '0.13.0',
+    date: '2026-11-25',
+    title: 'Impossible mode and new enemy plans',
+    items: [
+      'New difficulty: Impossible. The enemy gathers, trains and researches 40% faster, builds extra Barracks and Stables, attacks with bigger armies, and trains the units that beat yours.',
+      'Three new enemy plans, used at every difficulty. Fast Imperial races to Samurai and Knights. Fortress rings its town with guard towers and fills them with archers when raided. Swarm runs three Barracks and sends wave after wave.',
+      'Fixed: the enemy stopped building houses once the space around its Town Center filled up, so it got stuck at about 60 population.',
+      'Fixed: an enemy at full population sometimes never attacked.',
+    ],
+  },
+  {
     version: '0.12.0',
     date: '2026-11-23',
     title: 'The Pagoda as a landmark',

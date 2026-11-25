@@ -1,6 +1,6 @@
 # Pixel Kingdoms: handoff
 
-Read this first in a new chat. Last updated 2026-11-22, version **0.12.0**.
+Read this first in a new chat. Last updated 2026-11-25, version **0.13.0**.
 
 ## 1. Where everything is
 
@@ -24,7 +24,7 @@ Read this first in a new chat. Last updated 2026-11-22, version **0.12.0**.
 - **Keep Classic hidden.** Its art is still in `src/render/sprites.ts`, but `setTheme` always forces `sakura`, and the Theme menu option was removed on request.
 - Test UI changes in the browser at a desktop size and at a small or zoomed-in size (about 600 x 336). The owner's browser is zoomed to about 165%.
 
-## 3. What the game has (0.12.0)
+## 3. What the game has (0.13.0)
 
 - **Screens:** a title screen (a villager chased by a rider), a menu (difficulty, map: Rivers or Inland Sea, Controls, Open changelog, Sound, Music, Full screen), pause and an end screen with a stats table and graphs (army, villagers, resources over time; `src/stats.ts`, data from `World.history`, a snapshot every 10 s).
 - **Music:** made live in `src/audio.ts` (`Music`, `TRACKS`): a calm loop (D yo scale, koto, drone, flute) and a battle loop (E in scale, taiko). `Game.updateMood()` switches to battle after `MUSIC_MOOD` hits nearby and back to calm after a quiet spell. The game fills the whole window at a whole-number pixel scale.
@@ -68,7 +68,7 @@ Read this first in a new chat. Last updated 2026-11-22, version **0.12.0**.
   - Forest belts with 2 or 3 narrow gaps work as choke points. There are dense woods and open meadows.
   - Gold and stone sit near each village, with more in the middle.
   - Five river layouts are picked per match: twin streams (favored, about 40%), winding, meandering, central lake, and a wide river with fords.
-- **Enemy AI:** four hidden openings (Boom, Rush, Archer line, Horse raid) and three difficulties.
+- **Enemy AI:** seven hidden openings (Boom, Rush, Archer line, Horse raid, Fast Imperial, Fortress, Swarm) and four difficulties (Easy, Normal, Hard, Impossible). Only Impossible bends the rules: `team.speed` (1.4) speeds up its gathering, training and research. It also gets `extraTrainers` (more Barracks and Stables) and `counters` (`armyMix` shifts training toward `COUNTER` of the player's army). Openings can set `maxBarracks` and `lateMixAge` (switch to `mixAfter` on reaching that age). Archers garrison guard towers that are raided and come out after. Houses are placed further out once the town fills up, attack size is capped (`MAX_ATTACK`), and at full population it attacks with what it has, at most every 30 s.
   - It advances ages, mines gold and stone, plants paddies, moves workers between resources and builds guard towers.
   - Its soldiers break through walls when blocked.
   - Difficulty changes how fast it decides and how many mistakes it makes; it never gets extra resources.
@@ -91,7 +91,7 @@ Read this first in a new chat. Last updated 2026-11-22, version **0.12.0**.
 
 ## 5. Tools and tests
 
-- `npm test` runs 68 tests: economy, every combat matchup, ages, the market, gates, towers, repair, paddies, formations, queued orders, every river layout (mirrored and connected), and AI games including Hard beating Easy.
+- `npm test` runs 71 tests: economy, every combat matchup, ages, the market, gates, towers, repair, paddies, formations, queued orders, every river layout (mirrored and connected), and AI games including Hard beating Easy.
 - `npm run balance` plays every opening against every other (32 games, takes several minutes). The last run was fairly even, with games of about 11 to 22 minutes.
 - `npx tsx scripts/mappng.ts out.png 5 5:twin 5:sea` renders map overviews (`seed`, `seed:riverKind` or `seed:sea`). `scripts/showmap.ts` prints a map as text. `scripts/simulate.ts` traces one AI.
 - In the browser console, `pk()` returns the live Game. The built-in browser pane runs at about 1.5 fps when hidden, so drive time with `pk().update(1/60)` loops.

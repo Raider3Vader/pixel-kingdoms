@@ -34,6 +34,8 @@ import {
   landingSpot,
   orderBoard,
   orderUnload,
+  orderGarrison,
+  ungarrison,
   landPassengers,
   nearestDropoff,
   nearestResource,
@@ -64,6 +66,7 @@ export interface Bot {
   reserve: Cost; // set aside for a Pagoda or a war boat: troops are not trained out of it
   landing: Landing | null; // a sea landing under way
   landingsSent: number;
+  lastAttackAt: number;
 }
 
 /** A landing party: soldiers board a transport, it sails to the enemy's shore, and they storm ashore. */
@@ -78,6 +81,7 @@ interface Landing {
 export function createBot(w: World, team: number, diffKey: DifficultyKey, openingKey?: OpeningKey): Bot {
   const keys = Object.keys(OPENINGS) as OpeningKey[];
   const ok = openingKey ?? keys[Math.floor(w.rng() * keys.length)];
+  w.teams[team].speed = DIFFICULTY[diffKey].speed;
   return {
     team,
     diffKey,
@@ -96,6 +100,7 @@ export function createBot(w: World, team: number, diffKey: DifficultyKey, openin
     reserve: {},
     landing: null,
     landingsSent: 0,
+    lastAttackAt: -999,
   };
 }
 
@@ -186,7 +191,7 @@ function economy(w: World, bot: Bot, tc: Entity): void {
   have.food += teamUnits(w, bot.team, 'fishingBoat').length;
   const share = (n: number): Record<ResKind, number> => {
     const gold = team.age >= 1 ? 0.18 : 0;
-    const stone = team.age >= 1 && bot.opening.towers > 0 ? 0.08 : 0;
+    const stone = team.age >= 1 && bot.opening.towers > 0 ? (bot.opening.towers >= 3 ? 0.14 : 0.08) : 0;
     const rest = 1 - gold - stone;
     return { food: n * rest * bot.opening.foodShare, wood: n * rest * (1 - bot.opening.foodShare), gold: n * gold, stone: n * stone };
   };
@@ -269,7 +274,8 @@ function economy(w: World, bot: Bot, tc: Entity): void {
   const margin = 2 + (teamBuildings(w, bot.team, 'barracks', true).length + teamBuildings(w, bot.team, 'stable', true).length) * 2;
   const forgets = bot.diffKey === 'easy' && w.rng() < 0.5;
   if (!houseBuilding && !forgets && team.popCap < 100 && team.popCap - team.popUsed <= margin) {
-    tryBuild(w, bot, 'house', tc.x, tc.y, 4, 10);
+    // near the Town Center, further out once that fills up
+    if (!tryBuild(w, bot, 'house', tc.x, tc.y, 4, 10)) tryBuild(w, bot, 'house', tc.x, tc.y, 10, 18);
   }
 
   // storehouses near resources that are far from any drop-off
@@ -288,7 +294,7 @@ function economy(w: World, bot: Bot, tc: Entity): void {
 
   // military buildings: a Barracks first, a Stable once the Feudal Age allows it
   const toward = { x: tc.x + (w.w * T / 2 - tc.x) * 0.25, y: tc.y + (w.h * T / 2 - tc.y) * 0.25 };
-  const allMix = [...Object.keys(bot.opening.mix), ...Object.keys(bot.opening.mixAfter)];
+  const allMix = [...Object.keys(bot.opening.mix), ...Object.keys(bot.opening.mixAfter), ...(bot.diff.counters ? ['cavalry'] : [])];
   const count = (t: BuildingType): number => teamBuildings(w, bot.team, t).length;
   if (bot.saving) return;
   if (count('barracks') === 0 && vills.length >= bot.opening.barracksAtVillagers) {
@@ -297,8 +303,10 @@ function economy(w: World, bot: Bot, tc: Entity): void {
     tryBuild(w, bot, 'stable', toward.x, toward.y, 2, 10);
   } else if (team.age >= 2 && count('pagoda') === 0 && allMix.includes('samurai') && vills.length >= 16) {
     if (!tryBuild(w, bot, 'pagoda', toward.x, toward.y, 3, 11)) bot.reserve = BUILDINGS.pagoda.cost;
-  } else if (count('barracks') === 1 && bot.diffKey !== 'easy' && vills.length >= 20) {
+  } else if (count('barracks') >= 1 && count('barracks') < maxBarracks(bot) && vills.length >= Math.min(20, bot.opening.barracksAtVillagers + 6 * count('barracks'))) {
     tryBuild(w, bot, 'barracks', toward.x, toward.y, 2, 10);
+  } else if (team.age >= 1 && count('stable') >= 1 && count('stable') <= bot.diff.extraTrainers / 2 && allMix.includes('cavalry') && vills.length >= 24) {
+    tryBuild(w, bot, 'stable', toward.x, toward.y, 2, 11);
   } else if (team.age >= 1 && count('guardTower') + count('watchTower') < bot.opening.towers) {
     // guard towers on the side facing the enemy
     const out = { x: tc.x + (w.w * T / 2 - tc.x) * 0.15, y: tc.y + (w.h * T / 2 - tc.y) * 0.15 };
@@ -306,12 +314,42 @@ function economy(w: World, bot: Bot, tc: Entity): void {
   }
 }
 
+function maxBarracks(bot: Bot): number {
+  return (bot.opening.maxBarracks ?? (bot.diffKey === 'easy' ? 1 : 2)) + bot.diff.extraTrainers;
+}
+
+/** What beats each kind of soldier. */
+const COUNTER: Partial<Record<UnitType, UnitType>> = {
+  swordsman: 'archer',
+  spearman: 'swordsman',
+  archer: 'cavalry',
+  cavalry: 'spearman',
+  samurai: 'cavalry',
+};
+
+/** The opening's mix, shifted toward units that beat the enemy's army (Impossible only). */
+export function armyMix(w: World, bot: Bot): Partial<Record<UnitType, number>> {
+  const late = bot.attacksSent > 0 || (bot.opening.lateMixAge !== undefined && w.teams[bot.team].age >= bot.opening.lateMixAge);
+  const base = late ? bot.opening.mixAfter : bot.opening.mix;
+  if (!bot.diff.counters) return base;
+  const foes = w.units.filter((u) => !u.dead && u.team !== bot.team && u.team < 2 && isSoldier(u) && !isNaval(u) && COUNTER[u.type as UnitType]);
+  if (foes.length < 3) return base;
+  const mix: Partial<Record<UnitType, number>> = { ...base };
+  const wsum = Object.values(base).reduce((a, c) => a + (c ?? 0), 0);
+  // half the army follows the plan, half answers what the enemy fields
+  for (const f of foes) {
+    const c = COUNTER[f.type as UnitType]!;
+    mix[c] = (mix[c] ?? 0) + wsum / foes.length;
+  }
+  return mix;
+}
+
 function military(w: World, bot: Bot): void {
   const team = w.teams[bot.team];
   const vills = teamUnits(w, bot.team, 'villager').length;
   const tc = home(w, bot);
   const villagersWanted = vills < bot.diff.villagerTarget && !(bot.opening.earlyVillagerCap !== null && bot.attacksSent === 0 && vills >= bot.opening.earlyVillagerCap);
-  const mix = bot.attacksSent === 0 ? bot.opening.mix : bot.opening.mixAfter;
+  const mix = armyMix(w, bot);
   const soldiers = w.units.filter((u) => !u.dead && u.team === bot.team && isSoldier(u) && !isNaval(u) && u.type !== 'scout');
   const trainers = w.buildings.filter((b) => !b.dead && b.team === bot.team && b.progress >= 1 && (b.type === 'barracks' || b.type === 'stable' || b.type === 'pagoda'));
   // with a few Samurai out, study the Way of the Warrior before training more
@@ -349,6 +387,8 @@ function military(w: World, bot: Bot): void {
   }
 }
 
+const MAX_ATTACK = 45; // armies never need to wait for more than this
+
 function playerTargets(w: World, bot: Bot): Entity[] {
   return w.buildings.filter((b) => !b.dead && b.team !== bot.team && b.team < 2);
 }
@@ -356,7 +396,11 @@ function playerTargets(w: World, bot: Bot): Entity[] {
 function attack(w: World, bot: Bot, tc: Entity): void {
   const army = w.units.filter((u) => !u.dead && u.team === bot.team && isSoldier(u) && !isNaval(u) && !u.inside && !isRider(bot, u) && u.type !== 'scout' && !bot.defending.has(u.id));
   const idle = army.filter((u) => u.order.type === 'idle');
-  if (idle.length < bot.attackSize || w.time < bot.diff.firstAttackSec) return;
+  // at the population limit the army cannot grow, so go with what is ready
+  const team = w.teams[bot.team];
+  const maxed = team.popUsed >= team.popCap - 1 && team.popCap >= 95;
+  const need = maxed ? Math.min(bot.attackSize, Math.max(10, Math.round(army.length * 0.7))) : bot.attackSize;
+  if (idle.length < need || w.time < bot.diff.firstAttackSec || (maxed && w.time - bot.lastAttackAt < 30)) return;
   const targets = playerTargets(w, bot);
   if (targets.length === 0) return;
   let goal: Entity;
@@ -368,9 +412,10 @@ function attack(w: World, bot: Bot, tc: Entity): void {
     goal = targets.sort((a, b) => Math.hypot(a.x - tc.x, a.y - tc.y) - Math.hypot(b.x - tc.x, b.y - tc.y))[0];
   }
   // send the planned number; anything extra stays home to defend
-  orderMove(w, idle.slice(0, bot.attackSize), goal.x, goal.y, true);
+  orderMove(w, maxed ? idle : idle.slice(0, bot.attackSize), goal.x, goal.y, true);
   bot.attacksSent++;
-  bot.attackSize += Math.max(1, Math.round(bot.opening.attackGrow * bot.diff.armyScale));
+  bot.lastAttackAt = w.time;
+  bot.attackSize = Math.min(MAX_ATTACK, bot.attackSize + Math.max(1, Math.round(bot.opening.attackGrow * bot.diff.armyScale)));
 }
 
 function defend(w: World, bot: Bot, tc: Entity): void {
@@ -380,6 +425,8 @@ function defend(w: World, bot: Bot, tc: Entity): void {
     if (bot.threatSince >= 0 && w.time - bot.lastThreatAt > 5) {
       bot.threatSince = -1;
       bot.defending.clear();
+      // the raid is over: archers come out of the towers
+      for (const tw of mine) if (tw.type === 'guardTower' && garrisoned(w, tw).length) ungarrison(w, tw);
     }
     return;
   }
@@ -394,6 +441,14 @@ function defend(w: World, bot: Bot, tc: Entity): void {
   if (free.length) {
     orderMove(w, free, cx, cy, true);
     for (const s of free) bot.defending.add(s.id);
+  }
+  // archers near a guard tower climb in and shoot from it
+  for (const tw of mine) {
+    if (tw.type !== 'guardTower' || tw.progress < 1 || !threats.some((t) => distToEntity(t.x, t.y, tw) < 8 * T)) continue;
+    const room = (BUILDINGS.guardTower.garrison ?? 0) - garrisoned(w, tw).length;
+    if (room <= 0) continue;
+    const archers = soldiers.filter((u) => u.type === 'archer' && u.order.type !== 'garrison' && Math.hypot(u.x - tw.x, u.y - tw.y) < 7 * T).slice(0, room);
+    if (archers.length) orderGarrison(w, archers, tw);
   }
   // villagers near the raiders run to the Town Center
   for (const v of teamUnits(w, bot.team, 'villager')) {
@@ -513,7 +568,7 @@ function landing(w: World, bot: Bot): boolean {
   orderBoard(w, riders, boat);
   bot.landing = { boat: boat.id, riders: riders.map((u) => u.id), target: target.id, phase: 'boarding', since: w.time };
   bot.attacksSent++;
-  bot.attackSize += Math.max(1, Math.round(bot.opening.attackGrow * bot.diff.armyScale));
+  bot.attackSize = Math.min(MAX_ATTACK, bot.attackSize + Math.max(1, Math.round(bot.opening.attackGrow * bot.diff.armyScale)));
   return true;
 }
 

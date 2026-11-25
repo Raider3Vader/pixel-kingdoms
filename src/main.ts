@@ -81,6 +81,7 @@ const DIFF_HINTS: Record<DifficultyKey, string> = {
   easy: 'The enemy builds slowly and makes mistakes.',
   normal: 'A fair fight.',
   hard: 'The enemy builds fast and reacts at once.',
+  impossible: 'The enemy works 40% faster, trains more, and counters your army.',
 };
 
 function renderMenu(): void {

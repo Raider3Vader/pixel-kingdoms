@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { AGES, BUILDINGS, ECONOMY, SIM, UNITS, WAY_OF_WARRIOR, hitDamage, type Age, type UnitType } from '../config';
-import { createBot, updateBot } from './bot';
+import { armyMix, createBot, updateBot } from './bot';
 import { RIVERS, createMatch, type RiverKind } from './map';
 import { findPath } from './path';
 import {
@@ -300,6 +300,50 @@ describe('enemy kingdom', () => {
     });
     expect(w.winner).toBe(PLAYER);
   }, 120_000);
+
+  it('the Impossible enemy gathers 40% faster', () => {
+    const wood = (diff: 'hard' | 'impossible'): number => {
+      const w = testWorld();
+      createBot(w, ENEMY, diff);
+      spawnBuilding(w, 'storehouse', ENEMY, 17, 22, true);
+      const tree = spawnResource(w, 'tree', 20, 22)!;
+      const v = spawnUnit(w, 'villager', ENEMY, 19 * T, 22 * T);
+      const before = w.teams[ENEMY].wood;
+      orderGather(w, [v], tree);
+      run(w, 90);
+      return w.teams[ENEMY].wood - before;
+    };
+    expect(wood('impossible')).toBeGreaterThan(wood('hard') * 1.25);
+  });
+
+  it('the Impossible enemy answers cavalry with spearmen', () => {
+    const w = testWorld();
+    const bot = createBot(w, ENEMY, 'impossible', 'archers');
+    const calm = armyMix(w, bot).spearman ?? 0;
+    for (let i = 0; i < 6; i++) spawnUnit(w, 'cavalry', PLAYER, (10 + i) * T, 10 * T);
+    expect(armyMix(w, bot).spearman ?? 0).toBeGreaterThan(calm * 2);
+    // Hard keeps to its plan
+    const hard = createBot(w, ENEMY, 'hard', 'archers');
+    expect(armyMix(w, hard).spearman).toBe(calm);
+  });
+
+  it('archers climb into a guard tower when it is raided, and come out after', () => {
+    const w = testWorld();
+    const tower = spawnBuilding(w, 'guardTower', ENEMY, 50, 50, true);
+    for (let i = 0; i < 3; i++) spawnUnit(w, 'archer', ENEMY, (51 + i) * T, 52 * T);
+    const bot = createBot(w, ENEMY, 'hard', 'fortress');
+    const raider = spawnUnit(w, 'villager', PLAYER, 45 * T, 50 * T);
+    raider.hp = raider.maxHp = 5000; // lasts long enough to be a real raid
+    let peak = 0;
+    run(w, 20, () => {
+      updateBot(w, bot, DT);
+      peak = Math.max(peak, garrisoned(w, tower).length);
+    });
+    expect(peak).toBeGreaterThan(0);
+    kill(w, raider);
+    run(w, 15, () => updateBot(w, bot, DT));
+    expect(garrisoned(w, tower).length).toBe(0);
+  });
 });
 
 describe('pathing', () => {

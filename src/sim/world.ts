@@ -129,6 +129,7 @@ export interface TeamState {
   popUsed: number;
   stats: TeamStats;
   lastAlertAt: number;
+  speed: number; // gathering, training and research speed (the Impossible enemy works faster)
 }
 
 export type SimEvent =
@@ -189,6 +190,7 @@ export class World {
         popUsed: 0,
         stats: { gathered: 0, trained: 0, killed: 0, lost: 0, razed: 0, built: 0, byKind: { food: 0, wood: 0, gold: 0, stone: 0 }, agedAt: [], peakArmy: 0 },
         lastAlertAt: -999,
+        speed: 1,
       });
     }
   }
@@ -1476,7 +1478,7 @@ function gatherStep(w: World, u: Entity, dt: number): void {
   }
   u.anim = 'work';
   u.facing = res.x >= u.x ? 1 : -1;
-  const rate = RESOURCES[o.resType].gatherPerSec * dt;
+  const rate = RESOURCES[o.resType].gatherPerSec * dt * (w.teams[u.team]?.speed ?? 1);
   const take = Math.min(rate, res.amount, cap - u.carry);
   u.carry += take;
   res.amount -= take;
@@ -1948,14 +1950,14 @@ function updateBuilding(w: World, b: Entity, dt: number): void {
   if (b.progress < 1) return;
   const s = BUILDINGS[b.type as BuildingType];
   if (b.research) {
-    b.research.t += dt;
+    b.research.t += dt * (w.teams[b.team]?.speed ?? 1);
     if (b.research.t >= b.research.sec) finishResearch(w, b);
   }
   // training
   if (b.queue.length > 0 && !b.research) {
     const type = b.queue[0];
     const need = UNITS[type].trainSec;
-    if (b.queueT < need) b.queueT = Math.min(need, b.queueT + dt);
+    if (b.queueT < need) b.queueT = Math.min(need, b.queueT + dt * (w.teams[b.team]?.speed ?? 1));
     if (b.queueT >= need) {
       const team = w.teams[b.team];
       if (team.popUsed >= team.popCap) {

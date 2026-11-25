@@ -366,7 +366,7 @@ export function costText(c: Cost): string {
     .join(', ');
 }
 
-export type DifficultyKey = 'easy' | 'normal' | 'hard';
+export type DifficultyKey = 'easy' | 'normal' | 'hard' | 'impossible';
 export interface Difficulty {
   name: string;
   decideSec: number; // how often the enemy makes decisions
@@ -375,14 +375,18 @@ export interface Difficulty {
   reactSec: number; // delay before it responds to a raid
   armyScale: number; // multiplies the army size it waits for before attacking
   firstAttackSec: number; // it never attacks before this game time
+  speed: number; // gathering, training and research speed (1 = the player's)
+  extraTrainers: number; // more Barracks and Stables than its plan asks for
+  counters: boolean; // shifts its army toward units that beat yours
 }
 export const DIFFICULTY: Record<DifficultyKey, Difficulty> = {
-  easy: { name: 'Easy', decideSec: 4, villagerTarget: 15, mistakeChance: 0.35, reactSec: 12, armyScale: 0.75, firstAttackSec: 420 },
-  normal: { name: 'Normal', decideSec: 2, villagerTarget: 22, mistakeChance: 0.1, reactSec: 6, armyScale: 1, firstAttackSec: 300 },
-  hard: { name: 'Hard', decideSec: 0.5, villagerTarget: 30, mistakeChance: 0, reactSec: 1, armyScale: 1.25, firstAttackSec: 0 },
+  easy: { name: 'Easy', decideSec: 4, villagerTarget: 15, mistakeChance: 0.35, reactSec: 12, armyScale: 0.75, firstAttackSec: 420, speed: 1, extraTrainers: 0, counters: false },
+  normal: { name: 'Normal', decideSec: 2, villagerTarget: 22, mistakeChance: 0.1, reactSec: 6, armyScale: 1, firstAttackSec: 300, speed: 1, extraTrainers: 0, counters: false },
+  hard: { name: 'Hard', decideSec: 0.5, villagerTarget: 30, mistakeChance: 0, reactSec: 1, armyScale: 1.25, firstAttackSec: 0, speed: 1, extraTrainers: 0, counters: false },
+  impossible: { name: 'Impossible', decideSec: 0.25, villagerTarget: 40, mistakeChance: 0, reactSec: 0, armyScale: 1.5, firstAttackSec: 0, speed: 1.4, extraTrainers: 2, counters: true },
 };
 
-export type OpeningKey = 'boom' | 'rush' | 'archers' | 'horseRaid';
+export type OpeningKey = 'boom' | 'rush' | 'archers' | 'horseRaid' | 'fastImperial' | 'fortress' | 'swarm';
 export interface Opening {
   name: string;
   foodShare: number; // share of food+wood villagers on food
@@ -396,10 +400,18 @@ export interface Opening {
   firstAttackSize: number;
   attackGrow: number;
   towers: number; // guard towers it builds once in the Feudal Age
+  maxBarracks?: number; // default 2 (1 on Easy)
+  lateMixAge?: number; // switch to mixAfter on reaching this age, even before attacking
 }
 export const OPENINGS: Record<OpeningKey, Opening> = {
   boom: { name: 'Boom', foodShare: 0.55, barracksAtVillagers: 18, feudalAtVillagers: 16, imperialAtVillagers: 26, earlyVillagerCap: null, maxStorehouses: 3, mix: { swordsman: 2, spearman: 1, archer: 2, cavalry: 1 }, mixAfter: { swordsman: 2, spearman: 1, archer: 2, cavalry: 2, samurai: 2 }, firstAttackSize: 12, attackGrow: 3, towers: 2 },
   rush: { name: 'Rush', foodShare: 0.6, barracksAtVillagers: 7, feudalAtVillagers: 13, imperialAtVillagers: 24, earlyVillagerCap: 10, maxStorehouses: 1, mix: { swordsman: 2, spearman: 1 }, mixAfter: { swordsman: 2, spearman: 1, archer: 1, samurai: 1 }, firstAttackSize: 4, attackGrow: 2, towers: 0 },
   archers: { name: 'Archer line', foodShare: 0.5, barracksAtVillagers: 9, feudalAtVillagers: 11, imperialAtVillagers: 24, earlyVillagerCap: null, maxStorehouses: 2, mix: { archer: 3, spearman: 1 }, mixAfter: { archer: 2, swordsman: 1, cavalry: 1 }, firstAttackSize: 7, attackGrow: 3, towers: 1 },
   horseRaid: { name: 'Horse raid', foodShare: 0.65, barracksAtVillagers: 9, feudalAtVillagers: 11, imperialAtVillagers: 24, earlyVillagerCap: null, maxStorehouses: 2, mix: { cavalry: 1 }, mixAfter: { cavalry: 2, spearman: 1, archer: 1 }, firstAttackSize: 4, attackGrow: 2, towers: 0 },
+  // races to the Imperial Age behind a few guards, then comes with Samurai and Knights
+  fastImperial: { name: 'Fast Imperial', foodShare: 0.55, barracksAtVillagers: 14, feudalAtVillagers: 13, imperialAtVillagers: 19, earlyVillagerCap: null, maxStorehouses: 3, mix: { spearman: 1, archer: 1 }, mixAfter: { samurai: 3, cavalry: 2, archer: 1 }, firstAttackSize: 12, attackGrow: 4, towers: 1, lateMixAge: 2 },
+  // guard towers ring its town, archers fill them when raided; then one big push
+  fortress: { name: 'Fortress', foodShare: 0.5, barracksAtVillagers: 12, feudalAtVillagers: 13, imperialAtVillagers: 24, earlyVillagerCap: null, maxStorehouses: 2, mix: { archer: 2, spearman: 2 }, mixAfter: { archer: 2, swordsman: 2, cavalry: 1, samurai: 1 }, firstAttackSize: 16, attackGrow: 4, towers: 5 },
+  // three Barracks pump out cheap foot soldiers in steady waves
+  swarm: { name: 'Swarm', foodShare: 0.6, barracksAtVillagers: 8, feudalAtVillagers: 17, imperialAtVillagers: 28, earlyVillagerCap: 15, maxStorehouses: 1, mix: { swordsman: 2, spearman: 2 }, mixAfter: { swordsman: 2, spearman: 2, archer: 1 }, firstAttackSize: 8, attackGrow: 2, towers: 0, maxBarracks: 3 },
 };
