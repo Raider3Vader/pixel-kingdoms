@@ -9,6 +9,16 @@ export interface ChangelogEntry {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    version: '0.13.2',
+    date: '2026-11-25',
+    title: 'A smarter Jordan Mode',
+    items: [
+      'Jordan Mode (Hard) now retreats from fights it is losing and regroups with its next wave, instead of fighting to the last soldier. Hudson Mode does too.',
+      'Jordan Mode now also trains the units that beat your army.',
+      'Jordan Mode trains fewer villagers (22, down from 30), so it has more army early.',
+    ],
+  },
+  {
     version: '0.13.1',
     date: '2026-11-25',
     title: 'New names for the difficulties',

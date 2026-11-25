@@ -67,6 +67,7 @@ export interface Bot {
   landing: Landing | null; // a sea landing under way
   landingsSent: number;
   lastAttackAt: number;
+  attackers: Set<number>; // soldiers sent out to attack
 }
 
 /** A landing party: soldiers board a transport, it sails to the enemy's shore, and they storm ashore. */
@@ -101,6 +102,7 @@ export function createBot(w: World, team: number, diffKey: DifficultyKey, openin
     landing: null,
     landingsSent: 0,
     lastAttackAt: -999,
+    attackers: new Set(),
   };
 }
 
@@ -412,10 +414,49 @@ function attack(w: World, bot: Bot, tc: Entity): void {
     goal = targets.sort((a, b) => Math.hypot(a.x - tc.x, a.y - tc.y) - Math.hypot(b.x - tc.x, b.y - tc.y))[0];
   }
   // send the planned number; anything extra stays home to defend
-  orderMove(w, maxed ? idle : idle.slice(0, bot.attackSize), goal.x, goal.y, true);
+  const sent = maxed ? idle : idle.slice(0, bot.attackSize);
+  orderMove(w, sent, goal.x, goal.y, true);
+  for (const u of sent) bot.attackers.add(u.id);
   bot.attacksSent++;
   bot.lastAttackAt = w.time;
   bot.attackSize = Math.min(MAX_ATTACK, bot.attackSize + Math.max(1, Math.round(bot.opening.attackGrow * bot.diff.armyScale)));
+}
+
+/** Rough fighting worth: what it cost, scaled by the health it has left. */
+function worth(u: Entity): number {
+  const c = UNITS[u.type as UnitType].cost;
+  return ((c.food ?? 0) + (c.wood ?? 0) + (c.gold ?? 0)) * (u.hp / Math.max(1, u.maxHp));
+}
+
+/**
+ * Hard and Impossible: an attack that runs into more than it can handle
+ * pulls back home to regroup with the next wave instead of dying.
+ */
+function retreat(w: World, bot: Bot, tc: Entity): void {
+  if (!bot.diff.retreats || bot.attackers.size === 0) return;
+  const out: Entity[] = [];
+  for (const id of bot.attackers) {
+    const u = w.get(id);
+    if (u && !u.dead && !u.inside) out.push(u);
+  }
+  bot.attackers = new Set(out.map((u) => u.id));
+  const field = out.filter((u) => Math.hypot(u.x - tc.x, u.y - tc.y) > 18 * T);
+  if (field.length === 0) return;
+  const cx = field.reduce((a, u) => a + u.x, 0) / field.length;
+  const cy = field.reduce((a, u) => a + u.y, 0) / field.length;
+  const R = 10 * T;
+  const near = (e: Entity): boolean => Math.hypot(e.x - cx, e.y - cy) < R;
+  const mine = field.filter(near).reduce((a, u) => a + worth(u), 0);
+  let foes = 0;
+  for (const u of w.units) if (!u.dead && !u.inside && u.team !== bot.team && u.team < 2 && isSoldier(u) && !isNaval(u) && near(u)) foes += worth(u);
+  for (const b of w.buildings) {
+    if (b.dead || b.team === bot.team || b.team >= 2 || b.progress < 1 || !near(b)) continue;
+    if (b.type === 'townCenter') foes += 250;
+    else if (b.type === 'guardTower') foes += 150 + garrisoned(w, b).length * 60;
+  }
+  if (foes <= mine * 1.3) return;
+  orderMove(w, field, tc.x, tc.y, false);
+  for (const u of field) bot.attackers.delete(u.id);
 }
 
 function defend(w: World, bot: Bot, tc: Entity): void {
@@ -580,6 +621,7 @@ export function updateBot(w: World, bot: Bot, dt: number): void {
   if (!tc) return;
   bot.reserve = {};
   defend(w, bot, tc);
+  retreat(w, bot, tc);
   if (w.rng() < bot.diff.mistakeChance) return;
   economy(w, bot, tc);
   naval(w, bot, tc);

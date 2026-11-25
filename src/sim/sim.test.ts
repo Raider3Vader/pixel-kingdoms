@@ -316,15 +316,31 @@ describe('enemy kingdom', () => {
     expect(wood('impossible')).toBeGreaterThan(wood('hard') * 1.25);
   });
 
-  it('the Impossible enemy answers cavalry with spearmen', () => {
+  it('Hard and Impossible answer cavalry with spearmen', () => {
     const w = testWorld();
     const bot = createBot(w, ENEMY, 'impossible', 'archers');
     const calm = armyMix(w, bot).spearman ?? 0;
     for (let i = 0; i < 6; i++) spawnUnit(w, 'cavalry', PLAYER, (10 + i) * T, 10 * T);
     expect(armyMix(w, bot).spearman ?? 0).toBeGreaterThan(calm * 2);
-    // Hard keeps to its plan
-    const hard = createBot(w, ENEMY, 'hard', 'archers');
-    expect(armyMix(w, hard).spearman).toBe(calm);
+    // Normal keeps to its plan
+    const normal = createBot(w, ENEMY, 'normal', 'archers');
+    expect(armyMix(w, normal).spearman).toBe(calm);
+  });
+
+  it('Hard pulls an attack back when it runs into a bigger army, Normal does not', () => {
+    const sent = (diff: 'hard' | 'normal'): number => {
+      const w = testWorld();
+      const bot = createBot(w, ENEMY, diff, 'rush');
+      // three of its swordsmen out in the field meet ten enemy spearmen
+      const mine = [0, 1, 2].map((i) => spawnUnit(w, 'swordsman', ENEMY, (20 + i) * T, 20 * T));
+      for (let i = 0; i < 10; i++) spawnUnit(w, 'spearman', PLAYER, (18 + (i % 5)) * T, (17 + Math.floor(i / 5)) * T);
+      orderMove(w, mine, 5 * T, 5 * T, true);
+      for (const u of mine) bot.attackers.add(u.id);
+      run(w, 2, () => updateBot(w, bot, DT));
+      return mine.filter((u) => u.order.type === 'move' && !u.order.attackMove).length;
+    };
+    expect(sent('hard')).toBeGreaterThan(0);
+    expect(sent('normal')).toBe(0);
   });
 
   it('archers climb into a guard tower when it is raided, and come out after', () => {
